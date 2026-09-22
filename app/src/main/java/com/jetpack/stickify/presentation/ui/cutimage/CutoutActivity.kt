@@ -1,6 +1,7 @@
 package com.jetpack.stickify.presentation.ui.cutimage
 
 import android.content.Intent
+import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
@@ -11,13 +12,19 @@ import android.widget.ImageButton
 import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.button.MaterialButton
 import com.jetpack.stickify.R
+import com.jetpack.stickify.databinding.ActivityCutoutBinding
 import com.jetpack.stickify.presentation.ui.cutimage.ContourUtils
 import com.jetpack.stickify.presentation.ui.cutimage.ImageUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.core.graphics.toColorInt
+import io.ktor.sse.COLON
 
 /**
  * Màn hình "Chọn vùng ảnh":
@@ -37,11 +44,12 @@ class CutoutActivity : AppCompatActivity() {
         const val EXTRA_CROPPED_IMAGE_URI = "extra_cropped_image_uri"
     }
 
+    private lateinit var cutOutBinding:ActivityCutoutBinding
+
     private lateinit var overlayView: ContourOverlayView
-    private lateinit var btnEdit: Button
-    private lateinit var btnContinue: Button
+    private lateinit var btnEdit: MaterialButton
+    private lateinit var btnContinue: MaterialButton
     private lateinit var btnBack: ImageButton
-    private lateinit var progressBar: ProgressBar
     private lateinit var editToolsRow: View
     private lateinit var btnToolPoints: Button
     private lateinit var btnToolBrushAdd: Button
@@ -52,13 +60,12 @@ class CutoutActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_cutout)
+        cutOutBinding = DataBindingUtil.setContentView(this,R.layout.activity_cutout)
 
         overlayView = findViewById(R.id.overlayView)
-        btnEdit = findViewById(R.id.btnEdit)
-        btnContinue = findViewById(R.id.btnContinue)
+        btnEdit = cutOutBinding.btnEdit
+        btnContinue = cutOutBinding.btnContinue
         btnBack = findViewById(R.id.btnBack)
-        progressBar = findViewById(R.id.progressBar)
         editToolsRow = findViewById(R.id.editToolsRow)
         btnToolPoints = findViewById(R.id.btnToolPoints)
         btnToolBrushAdd = findViewById(R.id.btnToolBrushAdd)
@@ -105,12 +112,11 @@ class CutoutActivity : AppCompatActivity() {
     }
 
     private fun updateToolButtonStyles(selected: EditTool) {
-        val selectedColor = Color.parseColor("#2196F3")
-        val defaultColor = Color.parseColor("#F0F0F0")
+        val selectedColor = "#2196F3".toColorInt()
+        val defaultColor = ContextCompat.getColor(this, R.color.text_border_t300)
 
         fun style(button: Button, isSelected: Boolean) {
-            button.setBackgroundColor(if (isSelected) selectedColor else defaultColor)
-            button.setTextColor(if (isSelected) Color.WHITE else Color.parseColor("#333333"))
+            button.setTextColor(if (isSelected) selectedColor else defaultColor)
         }
         style(btnToolPoints, selected == EditTool.POINTS)
         style(btnToolBrushAdd, selected == EditTool.BRUSH_ADD)
@@ -118,7 +124,7 @@ class CutoutActivity : AppCompatActivity() {
     }
 
     private fun loadAndSegment(uri: Uri) {
-        progressBar.visibility = View.VISIBLE
+        cutOutBinding.loadingContainer.visibility = View.VISIBLE
         lifecycleScope.launch {
             try {
                 val bitmap = withContext(Dispatchers.IO) {
@@ -146,7 +152,7 @@ class CutoutActivity : AppCompatActivity() {
                     Toast.LENGTH_LONG
                 ).show()
             } finally {
-                progressBar.visibility = View.GONE
+                cutOutBinding.loadingContainer.visibility = View.GONE
             }
         }
     }
@@ -159,7 +165,7 @@ class CutoutActivity : AppCompatActivity() {
             return
         }
 
-        progressBar.visibility = View.VISIBLE
+        cutOutBinding.loadingContainer.visibility = View.VISIBLE
         setButtonsEnabled(false)
 
         lifecycleScope.launch {
@@ -179,7 +185,7 @@ class CutoutActivity : AppCompatActivity() {
                 Toast.makeText(this@CutoutActivity, "Lỗi khi cắt ảnh: ${e.message}", Toast.LENGTH_LONG).show()
                 setButtonsEnabled(true)
             } finally {
-                progressBar.visibility = View.GONE
+                cutOutBinding.loadingContainer.visibility = View.GONE
             }
         }
     }

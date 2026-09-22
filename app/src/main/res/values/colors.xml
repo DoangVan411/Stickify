@@ -2,4 +2,39 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <!-- Primary Colors -->
+    <color name="primary_p50">#E5F5FE</color>
+    <color name="primary_p75">#A4D4FB</color>
+    <color name="primary_p100">#7CC2F8</color>
+    <color name="primary_p200">#47A8F5</color>
+    <color name="primary_p300">#2195F3</color>
+    <color name="primary_p400">#1773CA</color>
+    <color name="primary_p500">#145C94</color>
+
+    <!-- Secondary Colors -->
+    <color name="secondary_s50">#FDEEE9</color>
+    <color name="secondary_s75">#F4B2A0</color>
+    <color name="secondary_s100">#F39082</color>
+    <color name="secondary_s200">#F0564C</color>
+    <color name="secondary_s300">#ED3B27</color>
+    <color name="secondary_s400">#A52C1B</color>
+    <color name="secondary_s500">#912618</color>
+
+    <!-- Background Colors -->
+    <color name="background_b50">#FFF7E8</color>
+    <color name="background_b75">#FFE3B4</color>
+    <color name="background_b100">#FED27A</color>
+    <color name="background_b200">#FEBD41</color>
+    <color name="background_b300">#FEB21C</color>
+    <color name="background_b400">#B27D12</color>
+    <color name="background_b500">#73580A</color>
+
+    <!-- Text + Border Colors -->
+    <color name="text_border_t50">#E8E8E8</color>
+    <color name="text_border_t75">#A1A1A1</color>
+    <color name="text_border_t100">#7A7A7A</color>
+    <color name="text_border_t200">#414141</color>
+    <color name="text_border_t300">#1C1C1C</color>
+    <color name="text_border_t400">#0F0F0F</color>
+    <color name="text_border_t500">#050505</color>
 </resources>

@@ -17,10 +17,12 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.jetpack.stickify.R
+import com.jetpack.stickify.databinding.ActivityGalleryBinding
 import com.jetpack.stickify.presentation.ui.cutimage.CutoutActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -34,14 +36,12 @@ import kotlinx.coroutines.withContext
 class GalleryActivity : AppCompatActivity() {
 
     companion object {
-        private const val GRID_SPAN_COUNT = 3
+        private const val GRID_SPAN_COUNT = 4
     }
 
-    private lateinit var recyclerView: RecyclerView
-    private lateinit var progressBar: ProgressBar
-    private lateinit var permissionDeniedGroup: View
-    private lateinit var btnGrantPermission: Button
     private lateinit var adapter: MediaGridAdapter
+
+    private lateinit var galleryBinding : ActivityGalleryBinding
 
     private val requiredPermissions: Array<String>
         get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -63,19 +63,15 @@ class GalleryActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_gallery)
+        galleryBinding = DataBindingUtil.setContentView(this, R.layout.activity_gallery)
 
-        recyclerView = findViewById(R.id.recyclerView)
-        progressBar = findViewById(R.id.progressBar)
-        permissionDeniedGroup = findViewById(R.id.permissionDeniedGroup)
-        btnGrantPermission = findViewById(R.id.btnGrantPermission)
 
         adapter = MediaGridAdapter(lifecycleScope) { item -> onMediaSelected(item) }
-        recyclerView.layoutManager = GridLayoutManager(this, GRID_SPAN_COUNT)
-        recyclerView.adapter = adapter
+        galleryBinding.recyclerView.layoutManager = GridLayoutManager(this, GRID_SPAN_COUNT)
+        galleryBinding.recyclerView.adapter = adapter
 
-        btnGrantPermission.setOnClickListener { requestPermissionOrOpenSettings() }
-
+        galleryBinding.btnGrantPermission.setOnClickListener { requestPermissionOrOpenSettings() }
+        galleryBinding.btnBack.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
         if (hasAllPermissions()) {
             loadMedia()
         } else {
@@ -104,22 +100,22 @@ class GalleryActivity : AppCompatActivity() {
     }
 
     private fun showGallery() {
-        permissionDeniedGroup.visibility = View.GONE
-        recyclerView.visibility = View.VISIBLE
+        galleryBinding.permissionDeniedGroup.visibility = View.GONE
+        galleryBinding.recyclerView.visibility = View.VISIBLE
     }
 
     private fun showPermissionDenied() {
-        recyclerView.visibility = View.GONE
-        progressBar.visibility = View.GONE
-        permissionDeniedGroup.visibility = View.VISIBLE
+        galleryBinding.recyclerView.visibility = View.GONE
+        galleryBinding.loadingAnimation.visibility = View.GONE
+        galleryBinding.permissionDeniedGroup.visibility = View.VISIBLE
     }
 
     private fun loadMedia() {
         showGallery()
-        progressBar.visibility = View.VISIBLE
+        galleryBinding.loadingAnimation.visibility = View.VISIBLE
         lifecycleScope.launch {
             val items = withContext(Dispatchers.IO) { queryAllMedia() }
-            progressBar.visibility = View.GONE
+            galleryBinding.loadingAnimation.visibility = View.GONE
             adapter.submitList(items)
         }
     }

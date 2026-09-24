@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/homeRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/colorBackground">
+
+    <!-- Fragment container - nội dung hiển thị tràn xuống dưới thanh floating nav -->
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/navHostFragmentHome"
+        android:name="androidx.navigation.fragment.NavHostFragment"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:defaultNavHost="true"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:navGraph="@navigation/nav_home" />
+
+    <LinearLayout
+        android:id="@+id/layoutBottomBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp"
+        android:layout_marginBottom="16dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <!-- Nút tròn [+] nổi bên trái -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/btnCreate"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackgroundBorderless"
+            app:cardBackgroundColor="#CCFFFFFF"
+            app:cardCornerRadius="28dp"
+            app:cardElevation="6dp">
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@string/create_sticker"
+                android:padding="14dp"
+                android:src="@drawable/ic_add" />
+
+        </androidx.cardview.widget.CardView>
+
+        <!-- Thanh Navigation dạng Pill bo tròn nổi bên phải -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardBottomNav"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            app:cardBackgroundColor="#CCFFFFFF"
+            app:cardCornerRadius="28dp"
+            app:cardElevation="6dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="4dp">
+
+                <!-- Tab: Trang chủ -->
+                <LinearLayout
+                    android:id="@+id/tabHome"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_nav_item_selected"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:id="@+id/ivTabHome"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="@string/tab_home"
+                        android:src="@drawable/ic_nav_home"
+                        app:tint="@color/colorPrimary" />
+
+                    <TextView
+                        android:id="@+id/tvTabHome"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/tab_home"
+                        android:textColor="@color/colorPrimary"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+
+                </LinearLayout>
+
+                <!-- Tab: Bộ sưu tập -->
+                <LinearLayout
+                    android:id="@+id/tabCollection"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@android:color/transparent"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:id="@+id/ivTabCollection"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="@string/tab_collection"
+                        android:src="@drawable/ic_nav_collection"
+                        app:tint="#8E8E93" />
+
+                    <TextView
+                        android:id="@+id/tvTabCollection"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/tab_collection"
+                        android:textColor="#8E8E93"
+                        android:textSize="10sp" />
+
+                </LinearLayout>
+
+                <!-- Tab: Tài nguyên -->
+                <LinearLayout
+                    android:id="@+id/tabResources"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@android:color/transparent"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:id="@+id/ivTabResources"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="@string/tab_resources"
+                        android:src="@drawable/ic_nav_resources"
+                        app:tint="#8E8E93" />
+
+                    <TextView
+                        android:id="@+id/tvTabResources"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/tab_resources"
+                        android:textColor="#8E8E93"
+                        android:textSize="10sp" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </androidx.cardview.widget.CardView>
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

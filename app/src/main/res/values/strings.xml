@@ -7,6 +7,34 @@
     <string name="next">Next</string>
     <string name="previous">Previous</string>
 
+    <!-- HomeScreen -->
+    <string name="home_subtitle">Thỏa sức sáng tạo, chia sẻ mọi cảm xúc!</string>
+    <string name="create_gif">Tạo GIF</string>
+    <string name="create_gif_desc">Biến ảnh hoặc video thành GIF</string>
+    <string name="create_sticker">Tạo Sticker</string>
+    <string name="create_sticker_desc">Tự tay tạo bộ Sticker độc nhất của bạn</string>
+    <string name="recent">Gần đây</string>
+    <string name="see_all">Tất cả</string>
+    <string name="explore">Khám phá</string>
+
+    <!-- Bottom Nav -->
+    <string name="tab_home">Trang chủ</string>
+    <string name="tab_collection">Bộ sưu tập</string>
+    <string name="tab_resources">Tài nguyên</string>
+
+    <!-- Categories -->
+    <string name="category_all">Tất cả</string>
+    <string name="category_gifs">GIFs</string>
+    <string name="category_stickers">Stickers</string>
+    <string name="category_cute">Cute</string>
+    <string name="category_meme">Meme</string>
+
+    <!-- Content descriptions -->
+    <string name="recent_thumbnail_desc">Ảnh đại diện project gần đây</string>
+    <string name="explore_thumbnail_desc">Ảnh đại diện template</string>
+    <string name="favorite_desc">Yêu thích</string>
+    <string name="more_options">Tùy chọn khác</string>
+
     <string name="lorem_ipsum">
         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam in scelerisque sem. Mauris
         volutpat, dolor id interdum ullamcorper, risus dolor egestas lectus, sit amet mattis purus

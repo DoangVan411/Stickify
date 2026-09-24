@@ -17,7 +17,9 @@ import com.google.android.material.snackbar.Snackbar
 import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.ActivityMainBinding
 import com.jetpack.stickify.presentation.ui.gallery.GalleryActivity
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
 
     private lateinit var appBarConfiguration: AppBarConfiguration
@@ -44,9 +46,10 @@ class MainActivity : AppCompatActivity() {
         appBarConfiguration = AppBarConfiguration(navController.graph)
         setupActionBarWithNavController(navController, appBarConfiguration)
 
-        binding.fab.setOnClickListener {
-            var intent = Intent(this, GalleryActivity::class.java)
-            startActivity(intent)
+        binding.fab.setOnClickListener { view ->
+            Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
+                .setAction("Action", null)
+                .setAnchorView(R.id.fab).show()
         }
     }
 

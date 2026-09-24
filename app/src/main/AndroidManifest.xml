@@ -9,6 +9,7 @@
         android:maxSdkVersion="32" />
 
     <application
+        android:name=".StickifyApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -24,7 +25,7 @@
             android:name=".presentation.ui.cutimage.CutoutActivity"
             android:exported="false" />
         <activity
-            android:name=".presentation.ui.MainActivity"
+            android:name=".presentation.ui.home.HomeActivity"
             android:exported="true"
             android:theme="@style/Theme.Stickify">
             <intent-filter>

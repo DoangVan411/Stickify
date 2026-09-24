@@ -1,3 +1,22 @@
 <resources>
     <dimen name="fab_margin">16dp</dimen>
+
+    <!-- Card -->
+    <dimen name="card_corner_radius">16dp</dimen>
+    <dimen name="card_elevation">2dp</dimen>
+
+    <!-- Spacing -->
+    <dimen name="spacing_xs">4dp</dimen>
+    <dimen name="spacing_sm">8dp</dimen>
+    <dimen name="spacing_md">16dp</dimen>
+    <dimen name="spacing_lg">20dp</dimen>
+    <dimen name="spacing_xl">24dp</dimen>
+
+    <!-- Icon -->
+    <dimen name="icon_size_sm">20dp</dimen>
+    <dimen name="icon_size_md">24dp</dimen>
+    <dimen name="icon_size_lg">72dp</dimen>
+
+    <!-- Explore Grid -->
+    <dimen name="explore_item_margin">4dp</dimen>
 </resources>

@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/white">
+
+    <!-- Top bar -->
+    <ImageButton
+        android:id="@+id/btnBack"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
+        android:background="@android:color/transparent"
+        android:src="@android:drawable/ic_menu_revert"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/tvTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Chỉnh sửa"
+        android:textSize="18sp"
+        android:textColor="#666666"
+        app:layout_constraintTop_toTopOf="@id/btnBack"
+        app:layout_constraintBottom_toBottomOf="@id/btnBack"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <Button
+        android:id="@+id/btnCreate"
+        android:layout_width="wrap_content"
+        android:layout_height="44dp"
+        android:layout_marginEnd="16dp"
+        android:minWidth="88dp"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:text="Tạo"
+        android:textAllCaps="false"
+        android:textColor="@android:color/white"
+        android:background="@drawable/bg_button_primary"
+        app:layout_constraintTop_toTopOf="@id/btnBack"
+        app:layout_constraintBottom_toBottomOf="@id/btnBack"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Vùng preview: nền caro + ảnh pinch-zoom/pan -->
+    <FrameLayout
+        android:id="@+id/previewContainer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginTop="24dp"
+        app:layout_constraintTop_toBottomOf="@id/btnBack"
+        app:layout_constraintDimensionRatio="1:1"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <com.jetpack.stickify.presentation.ui.editsticker.ZoomableStickerView
+            android:id="@+id/zoomableView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <ProgressBar
+            android:id="@+id/progressBar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center" />
+
+        <LinearLayout
+            android:id="@+id/undoRedoGroup"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_margin="16dp"
+            android:orientation="horizontal"
+            android:background="@drawable/bg_pill_white"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:elevation="4dp">
+
+            <ImageButton
+                android:id="@+id/btnUndo"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="@android:color/transparent"
+                android:src="@android:drawable/ic_menu_revert" />
+
+            <ImageButton
+                android:id="@+id/btnRedo"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="@android:color/transparent"
+                android:scaleX="-1"
+                android:src="@android:drawable/ic_menu_revert" />
+
+        </LinearLayout>
+
+    </FrameLayout>
+
+    <!-- Ô nhập tạo sticker động bằng AI (placeholder, chưa nối backend) -->
+    <LinearLayout
+        android:id="@+id/promptRow"
+        android:layout_width="0dp"
+        android:layout_height="52dp"
+        android:layout_marginStart="24dp"
+        android:layout_marginEnd="24dp"
+        android:layout_marginVertical="16dp"
+        android:background="@drawable/bg_pill_outline"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="6dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/previewContainer">
+
+        <EditText
+            android:id="@+id/etPrompt"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:hint="Tạo sticker động, chỉ với vài dòng..."
+            android:inputType="text"
+            android:maxLines="1"
+            android:textSize="14sp" />
+
+        <ImageButton
+            android:id="@+id/btnSendPrompt"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_circle_primary"
+            android:scaleType="center"
+            android:src="@android:drawable/ic_menu_send" />
+
+    </LinearLayout>
+
+    <!-- Tabs danh mục -->
+    <HorizontalScrollView
+        android:id="@+id/categoryTabsScroll"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="12dp"
+        android:scrollbars="none"
+        app:layout_constraintBottom_toTopOf="@id/suggestedStylesRow"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/promptRow">
+
+        <LinearLayout
+            android:id="@+id/categoryTabsRow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp" />
+
+    </HorizontalScrollView>
+
+    <!-- 3 kiểu đề xuất: Giữ nguyên / Viền ngoài / Hoạt hình -->
+    <LinearLayout
+        android:id="@+id/suggestedStylesRow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="24dp"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

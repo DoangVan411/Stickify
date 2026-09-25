@@ -46,7 +46,7 @@ class HomeActivity : AppCompatActivity() {
         // Xử lý edge-to-edge insets cho floating bottom bar
         ViewCompat.setOnApplyWindowInsetsListener(binding.homeRoot) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, 0)
+            v.setPadding(systemBars.left, 0, systemBars.right, 0)
 
             val baseMarginPx = (16 * resources.displayMetrics.density).toInt()
             val lp = binding.layoutBottomBar.layoutParams as ViewGroup.MarginLayoutParams

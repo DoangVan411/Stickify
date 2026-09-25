@@ -1,5 +1,6 @@
 package com.jetpack.stickify.presentation.ui.cutimage
 
+
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -208,5 +209,22 @@ object ContourUtils {
         }
         if (maxX < minX || maxY < minY) return null
         return Rect(max(0, minX), max(0, minY), min(w, maxX + 1), min(h, maxY + 1))
+    }
+
+    /**
+     * DEBUG: tỉ lệ pixel gần như trong suốt (alpha < 10) trong 1 bitmap ARGB_8888.
+     * Dùng để kiểm tra xem 1 bitmap có thực sự được "cắt" (còn phần trong suốt) hay không.
+     * Xóa hàm này sau khi debug xong.
+     */
+    fun transparentPixelRatio(bitmap: Bitmap): Float {
+        val w = bitmap.width
+        val h = bitmap.height
+        val pixels = IntArray(w * h)
+        bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
+        var transparentCount = 0
+        for (p in pixels) {
+            if (((p ushr 24) and 0xFF) < 10) transparentCount++
+        }
+        return transparentCount.toFloat() / pixels.size
     }
 }

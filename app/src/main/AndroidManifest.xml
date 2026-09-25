@@ -19,6 +19,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Stickify">
         <activity
+            android:name=".presentation.ui.editsticker.StickerEditActivity"
+            android:exported="false" />
+        <activity
             android:name=".presentation.ui.gallery.GalleryActivity"
             android:exported="false" />
         <activity

@@ -24,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.core.graphics.toColorInt
+import com.jetpack.stickify.presentation.ui.editsticker.StickerEditActivity
 import io.ktor.sse.COLON
 
 /**
@@ -175,10 +176,10 @@ class CutoutActivity : AppCompatActivity() {
                     ImageUtils.saveBitmapAndGetUri(this@CutoutActivity, cropped)
                 }
 
-//                val intent = Intent(this@CutoutActivity, NextActivity::class.java).apply {
-//                    putExtra(EXTRA_CROPPED_IMAGE_URI, croppedUri)
-//                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-//                }
+                val intent = Intent(this@CutoutActivity, StickerEditActivity::class.java).apply {
+                    putExtra(EXTRA_CROPPED_IMAGE_URI, croppedUri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
                 startActivity(intent)
                 finish()
             } catch (e: Exception) {

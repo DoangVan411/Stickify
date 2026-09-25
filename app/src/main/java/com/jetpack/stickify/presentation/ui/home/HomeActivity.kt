@@ -1,5 +1,6 @@
 package com.jetpack.stickify.presentation.ui.home
 
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.os.Bundle
@@ -18,6 +19,7 @@ import androidx.navigation.NavController
 import androidx.navigation.fragment.NavHostFragment
 import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.ActivityHomeBinding
+import com.jetpack.stickify.presentation.ui.gallery.GalleryActivity
 import dagger.hilt.android.AndroidEntryPoint
 
 /**
@@ -46,7 +48,7 @@ class HomeActivity : AppCompatActivity() {
         // Xử lý edge-to-edge insets cho floating bottom bar
         ViewCompat.setOnApplyWindowInsetsListener(binding.homeRoot) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, 0, systemBars.right, 0)
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, 0)
 
             val baseMarginPx = (16 * resources.displayMetrics.density).toInt()
             val lp = binding.layoutBottomBar.layoutParams as ViewGroup.MarginLayoutParams
@@ -69,7 +71,8 @@ class HomeActivity : AppCompatActivity() {
     private fun setupBottomBar() {
         // Nút tròn [+] tạo mới
         binding.btnCreate.setOnClickListener {
-            Toast.makeText(this, getString(R.string.create_sticker), Toast.LENGTH_SHORT).show()
+            var gallery = Intent(this, GalleryActivity::class.java)
+            startActivity(gallery)
         }
 
         // Click các tab

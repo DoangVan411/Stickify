@@ -160,9 +160,9 @@ class CutoutActivity : AppCompatActivity() {
 
     private fun onContinueClicked() {
         val bitmap = sourceBitmap ?: return
-        val mask = overlayView.getSelectionMask()
-        if (mask == null) {
-            Toast.makeText(this, "Chưa có vùng chọn nào", Toast.LENGTH_SHORT).show()
+        val points = overlayView.getContourPointsInBitmapSpace()
+        if (points.size < 3) {
+            Toast.makeText(this, "Cần ít nhất 3 điểm để cắt ảnh", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -171,8 +171,12 @@ class CutoutActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val croppedUri = withContext(Dispatchers.Default) {
-                    val cropped = ContourUtils.cutoutBitmapFromMask(bitmap, mask)
+                val cropped = withContext(Dispatchers.Default) {
+                    ContourUtils.cutoutBitmapFromPath(bitmap, points)
+                }
+
+
+                val croppedUri = withContext(Dispatchers.IO) {
                     ImageUtils.saveBitmapAndGetUri(this@CutoutActivity, cropped)
                 }
 
@@ -181,7 +185,6 @@ class CutoutActivity : AppCompatActivity() {
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
                 startActivity(intent)
-                finish()
             } catch (e: Exception) {
                 Toast.makeText(this@CutoutActivity, "Lỗi khi cắt ảnh: ${e.message}", Toast.LENGTH_LONG).show()
                 setButtonsEnabled(true)

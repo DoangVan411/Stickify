@@ -1,5 +1,7 @@
 package com.jetpack.stickify.presentation.ui.editsticker
 
+import com.jetpack.stickify.R
+import com.jetpack.stickify.presentation.ui.cutimage.ImageUtils
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -18,9 +20,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.jetpack.stickify.R
-import com.jetpack.stickify.presentation.ui.cutimage.ContourUtils
-import com.jetpack.stickify.presentation.ui.cutimage.ImageUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -135,14 +134,6 @@ class StickerEditActivity : AppCompatActivity() {
                     contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
                         ?: throw IllegalArgumentException("Không đọc được ảnh")
                 }
-
-                // DEBUG: kiểm tra ảnh vừa decode có còn giữ vùng trong suốt không.
-                val debugRatio = ContourUtils.transparentPixelRatio(original)
-                Toast.makeText(
-                    this@StickerEditActivity,
-                    "[DEBUG] decoded ${original.width}x${original.height}, trong suốt: ${(debugRatio * 100).toInt()}%",
-                    Toast.LENGTH_LONG
-                ).show()
 
                 val (border, cartoon) = withContext(Dispatchers.Default) {
                     val b = StickerStyleProcessor.addOuterBorder(original, Color.WHITE, BORDER_WIDTH_PX)

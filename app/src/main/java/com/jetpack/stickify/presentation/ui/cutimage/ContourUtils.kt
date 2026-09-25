@@ -165,13 +165,61 @@ object ContourUtils {
         canvas.drawPath(path, paint)
     }
 
+    /**
+     * Cắt [source] trực tiếp theo polygon [points] (tọa độ bitmap gốc) bằng kỹ thuật
+     * vẽ path đặc + SRC_IN — KHÔNG đi qua mask raster ALPHA_8 trung gian như
+     * [cutoutBitmapFromMask]. Dùng khi polygon (contourPoints, đã được chứng minh đúng
+     * qua việc vẽ nét đứt khớp chủ thể) là nguồn dữ liệu đáng tin cậy nhất.
+     */
+    fun cutoutBitmapFromPath(source: Bitmap, points: List<PointF>, paddingRatio: Float = 0.08f): Bitmap {
+        require(points.size >= 3) { "Cần ít nhất 3 điểm để tạo vùng cắt" }
+
+        val path = buildSmoothClosedPath(points)
+
+        val result = Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(result)
+
+        // Bước 1: tô đặc (fill) vùng polygon -> silhouette trắng đúng hình dạng đã chọn.
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+        canvas.drawPath(path, fillPaint)
+
+        // Bước 2: SRC_IN giữ lại đúng phần ảnh gốc trùng với silhouette vừa tô.
+        val srcInPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+        }
+        canvas.drawBitmap(source, 0f, 0f, srcInPaint)
+
+        val rawBbox = computeBoundingBoxFromPoints(points, source.width, source.height)
+        val bbox = padBoundingBox(rawBbox, source.width, source.height, paddingRatio)
+        return Bitmap.createBitmap(result, bbox.left, bbox.top, bbox.width(), bbox.height())
+    }
+
+    private fun computeBoundingBoxFromPoints(points: List<PointF>, maxWidth: Int, maxHeight: Int): Rect {
+        var minX = Float.MAX_VALUE; var minY = Float.MAX_VALUE
+        var maxX = -Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
+        for (p in points) {
+            if (p.x < minX) minX = p.x
+            if (p.x > maxX) maxX = p.x
+            if (p.y < minY) minY = p.y
+            if (p.y > maxY) maxY = p.y
+        }
+        val left = max(0, minX.toInt())
+        val top = max(0, minY.toInt())
+        val right = min(maxWidth, maxX.toInt() + 1)
+        val bottom = min(maxHeight, maxY.toInt() + 1)
+        return Rect(left, top, right, bottom)
+    }
+
     // ---------- Cắt ảnh cuối cùng theo mask (hỗ trợ hình dạng bất kỳ, nhiều vùng rời rạc) ----------
 
     /**
      * Cắt [source] theo [mask] (mask phải cùng kích thước với source, ALPHA_8).
-     * Trả về bitmap đã crop theo bounding box của vùng được chọn, nền trong suốt.
+     * Trả về bitmap đã crop theo bounding box của vùng được chọn (có chừa thêm padding
+     * [paddingRatio] quanh biên để giữ viền trong suốt nhìn thấy được — nếu crop sát khít
+     * 100% vào bounding box, phần trong suốt còn lại chỉ là các khe rất nhỏ bên trong chủ
+     * thể, mắt thường sẽ có cảm giác ảnh "không được cắt" dù alpha vẫn đúng).
      */
-    fun cutoutBitmapFromMask(source: Bitmap, mask: Bitmap): Bitmap {
+    fun cutoutBitmapFromMask(source: Bitmap, mask: Bitmap, paddingRatio: Float = 0.08f): Bitmap {
         require(source.width == mask.width && source.height == mask.height) {
             "Mask phải cùng kích thước với ảnh gốc (${source.width}x${source.height} vs ${mask.width}x${mask.height})"
         }
@@ -184,8 +232,19 @@ object ContourUtils {
         }
         canvas.drawBitmap(mask, 0f, 0f, cutPaint)
 
-        val bbox = computeOpaqueBoundingBox(mask) ?: return result
+        val rawBbox = computeOpaqueBoundingBox(mask) ?: return result
+        val bbox = padBoundingBox(rawBbox, source.width, source.height, paddingRatio)
         return Bitmap.createBitmap(result, bbox.left, bbox.top, bbox.width(), bbox.height())
+    }
+
+    /** Mở rộng [bbox] thêm [paddingRatio] theo cạnh lớn hơn của nó, giữ trong biên ảnh gốc. */
+    private fun padBoundingBox(bbox: Rect, sourceWidth: Int, sourceHeight: Int, paddingRatio: Float): Rect {
+        val padding = (max(bbox.width(), bbox.height()) * paddingRatio).toInt()
+        val left = max(0, bbox.left - padding)
+        val top = max(0, bbox.top - padding)
+        val right = min(sourceWidth, bbox.right + padding)
+        val bottom = min(sourceHeight, bbox.bottom + padding)
+        return Rect(left, top, right, bottom)
     }
 
     private fun computeOpaqueBoundingBox(mask: Bitmap): Rect? {

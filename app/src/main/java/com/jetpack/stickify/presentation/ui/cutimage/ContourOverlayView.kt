@@ -1,7 +1,6 @@
 package com.jetpack.stickify.presentation.ui.cutimage
 
 
-
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Bitmap
@@ -70,7 +69,7 @@ class ContourOverlayView @JvmOverloads constructor(
 
     private val dashPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 4f
+        strokeWidth = 5f
         color = Color.WHITE
         pathEffect = DashPathEffect(floatArrayOf(22f, 14f), 0f)
     }
@@ -131,6 +130,9 @@ class ContourOverlayView @JvmOverloads constructor(
     }
 
     fun getSelectionMask(): Bitmap? = selectionMask
+
+    /** Polygon contour hiện tại (theo tọa độ bitmap gốc) — dùng để cắt ảnh cuối cùng. */
+    fun getContourPointsInBitmapSpace(): List<PointF> = contourPoints.map { PointF(it.x, it.y) }
 
     fun startDashAnimation() {
         dashAnimator?.cancel()

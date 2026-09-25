@@ -4,20 +4,21 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:gravity="center_horizontal"
-    android:paddingStart="8dp"
-    android:paddingEnd="8dp">
+    android:paddingStart="4dp"
+    android:paddingEnd="4dp"
+    android:layout_marginEnd="15dp"
+    >
 
     <FrameLayout
-        android:layout_width="76dp"
-        android:layout_height="76dp"
-        android:background="@drawable/bg_style_thumb_frame"
-        android:padding="4dp">
-
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:padding="2dp"
+        >
         <ImageView
             android:id="@+id/ivStyleThumb"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:scaleType="centerCrop" />
+            android:scaleType="fitCenter" />
 
     </FrameLayout>
 
@@ -27,7 +28,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:textSize="12sp"
-        android:textColor="#333333"
+        android:textColor="@color/text_border_t300"
         tools:text="Giữ nguyên"
         xmlns:tools="http://schemas.android.com/tools" />
 

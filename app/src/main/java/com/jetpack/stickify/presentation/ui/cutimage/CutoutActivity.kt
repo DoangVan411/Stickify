@@ -144,7 +144,7 @@ class CutoutActivity : AppCompatActivity() {
                 }
                 // setSelectionMask tự dò lại polygon để vẽ nét đứt + handle.
                 overlayView.setSelectionMask(initialMask)
-                overlayView.startDashAnimation()
+//                overlayView.startDashAnimation()
                 setButtonsEnabled(true)
             } catch (e: Exception) {
                 Toast.makeText(

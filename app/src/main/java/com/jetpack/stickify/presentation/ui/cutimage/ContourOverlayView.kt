@@ -69,7 +69,7 @@ class ContourOverlayView @JvmOverloads constructor(
 
     private val dashPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 5f
+        strokeWidth = 4f
         color = Color.WHITE
         pathEffect = DashPathEffect(floatArrayOf(22f, 14f), 0f)
     }

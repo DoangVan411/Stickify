@@ -1,5 +1,111 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Basic -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- ============================================== -->
+    <!-- Primary Palette (Blue)                         -->
+    <!-- ============================================== -->
+    <color name="primary_50">#E9F5FE</color>
+    <color name="primary_75">#A4D4FA</color>
+    <color name="primary_100">#7EC2F8</color>
+    <color name="primary_200">#47A8F5</color>
+    <color name="primary_300">#2196F3</color>
+    <color name="primary_400">#1769AA</color>
+    <color name="primary_500">#145C94</color>
+
+    <!-- Short aliases for Primary -->
+    <color name="p50">@color/primary_50</color>
+    <color name="p75">@color/primary_75</color>
+    <color name="p100">@color/primary_100</color>
+    <color name="p200">@color/primary_200</color>
+    <color name="p300">@color/primary_300</color>
+    <color name="p400">@color/primary_400</color>
+    <color name="p500">@color/primary_500</color>
+
+    <!-- ============================================== -->
+    <!-- Secondary Palette (Red / Coral)                -->
+    <!-- ============================================== -->
+    <color name="secondary_50">#FDECE9</color>
+    <color name="secondary_75">#F8B0A6</color>
+    <color name="secondary_100">#F59082</color>
+    <color name="secondary_200">#F0604C</color>
+    <color name="secondary_300">#ED3F27</color>
+    <color name="secondary_400">#A62C1B</color>
+    <color name="secondary_500">#912618</color>
+
+    <!-- Short aliases for Secondary -->
+    <color name="s50">@color/secondary_50</color>
+    <color name="s75">@color/secondary_75</color>
+    <color name="s100">@color/secondary_100</color>
+    <color name="s200">@color/secondary_200</color>
+    <color name="s300">@color/secondary_300</color>
+    <color name="s400">@color/secondary_400</color>
+    <color name="s500">@color/secondary_500</color>
+
+    <!-- ============================================== -->
+    <!-- Background Palette (Warm Yellow / Ochre)       -->
+    <!-- ============================================== -->
+    <color name="background_50">#FFF7E8</color>
+    <color name="background_75">#FFDFA1</color>
+    <color name="background_100">#FED27A</color>
+    <color name="background_200">#FEBF41</color>
+    <color name="background_300">#FEB21A</color>
+    <color name="background_400">#B27D12</color>
+    <color name="background_500">#9B6D10</color>
+
+    <!-- Short aliases for Background -->
+    <color name="b50">@color/background_50</color>
+    <color name="b75">@color/background_75</color>
+    <color name="b100">@color/background_100</color>
+    <color name="b200">@color/background_200</color>
+    <color name="b300">@color/background_300</color>
+    <color name="b400">@color/background_400</color>
+    <color name="b500">@color/background_500</color>
+
+    <!-- ============================================== -->
+    <!-- Text + Border Palette (Neutrals / Grayscale)   -->
+    <!-- ============================================== -->
+    <color name="text_border_50">#E8E8E8</color>
+    <color name="text_border_75">#A1A1A1</color>
+    <color name="text_border_100">#7A7A7A</color>
+    <color name="text_border_200">#414141</color>
+    <color name="text_border_300">#1A1A1A</color>
+    <color name="text_border_400">#121212</color>
+    <color name="text_border_500">#101010</color>
+
+    <!-- Short aliases for Text+Border -->
+    <color name="t50">@color/text_border_50</color>
+    <color name="t75">@color/text_border_75</color>
+    <color name="t100">@color/text_border_100</color>
+    <color name="t200">@color/text_border_200</color>
+    <color name="t300">@color/text_border_300</color>
+    <color name="t400">@color/text_border_400</color>
+    <color name="t500">@color/text_border_500</color>
+
+    <!-- ============================================== -->
+    <!-- Semantic App Colors                            -->
+    <!-- ============================================== -->
+    <color name="colorPrimary">@color/primary_300</color>
+    <color name="colorPrimaryLight">@color/primary_50</color>
+    <color name="colorAccentPink">@color/secondary_75</color>
+
+    <!-- Badges -->
+    <color name="colorGifBadge">@color/primary_300</color>
+    <color name="colorStickerBadge">@color/secondary_200</color>
+
+    <!-- Backgrounds -->
+    <color name="colorBackground">#F8F9FA</color>
+    <color name="colorWarmBackground">@color/background_50</color>
+
+    <!-- Text -->
+    <color name="colorTextPrimary">@color/text_border_300</color>
+    <color name="colorTextSecondary">@color/text_border_75</color>
+    <color name="colorTextMuted">@color/text_border_100</color>
+
+    <!-- Chips -->
+    <color name="colorChipSelected">@color/primary_300</color>
+    <color name="colorChipUnselected">@color/text_border_50</color>
+    <color name="colorDivider">@color/text_border_50</color>
 </resources>

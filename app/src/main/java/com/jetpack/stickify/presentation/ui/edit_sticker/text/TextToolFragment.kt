@@ -1,4 +1,4 @@
-package com.jetpack.stickify.presentation.ui.editsticker.text
+package com.jetpack.stickify.presentation.ui.edit_sticker.text
 
 import android.os.Bundle
 import androidx.fragment.app.Fragment

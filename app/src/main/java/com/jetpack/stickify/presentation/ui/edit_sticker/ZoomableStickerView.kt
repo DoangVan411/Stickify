@@ -1,4 +1,4 @@
-package com.jetpack.stickify.presentation.ui.editsticker
+package com.jetpack.stickify.presentation.ui.edit_sticker
 
 import android.animation.ValueAnimator
 import android.content.Context
@@ -15,31 +15,28 @@ import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.animation.LinearInterpolator
 
-/**
- * View hiển thị ảnh sticker (PNG có alpha) trên nền caro trong suốt, hỗ trợ:
- * - Pinch-zoom bằng 2 ngón + pan (kéo di chuyển) bằng 1 hoặc nhiều ngón.
- * - Chuyển ảnh mượt (crossfade) khi đổi kiểu (Giữ nguyên / Viền ngoài / Hoạt hình) mà
- *   KHÔNG reset lại zoom/pan hiện tại của người dùng — matrix biến đổi giữ nguyên,
- *   chỉ nội dung bitmap mờ dần chuyển sang bitmap mới.
- */
 class ZoomableStickerView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
     companion object {
         private const val MIN_SCALE = 0.5f
-        private const val MAX_SCALE = 5f
+        private const val MAX_SCALE = 10f // Nới lỏng max scale để dễ xem viền
         private const val CROSSFADE_DURATION_MS = 260L
         private const val CHECKER_TILE_DP = 12f
     }
 
     private var currentBitmap: Bitmap? = null
     private var previousBitmap: Bitmap? = null
-    private var crossfadeProgress = 1f // 0 = đang hiện previousBitmap, 1 = đang hiện currentBitmap hoàn toàn
+    private var crossfadeProgress = 1f
     private var crossfadeAnimator: ValueAnimator? = null
 
-    /** Matrix chung áp dụng cho cả ảnh cũ lẫn ảnh mới khi crossfade, để giữ đúng zoom/pan. */
+    // Ma trận hiển thị ảnh hiện tại
     private val displayMatrix = Matrix()
+
+    // Ma trận hiển thị ảnh trước đó (dành riêng cho quá trình crossfade)
+    private val previousMatrix = Matrix()
+
     private var isMatrixInitialized = false
 
     private val bitmapPaintCurrent = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
@@ -47,23 +44,30 @@ class ZoomableStickerView @JvmOverloads constructor(
 
     private val checkerPaint: Paint by lazy { buildCheckerPaint() }
 
-    // ---------- Pinch zoom + pan ----------
+    // Touch events
     private val scaleGestureDetector = ScaleGestureDetector(context, ScaleListener())
     private var lastTouchX = 0f
     private var lastTouchY = 0f
     private var isPanning = false
 
-    /** Gán bitmap mới để hiển thị. [animate] = true sẽ crossfade mượt, false hiện ngay lập tức. */
     fun setBitmap(bitmap: Bitmap, animate: Boolean = true) {
         val previous = currentBitmap
         currentBitmap = bitmap
 
         if (!isMatrixInitialized) {
+            // Lần đầu tiên load ảnh: Căn giữa màn hình
             resetTransformToFit(bitmap)
+        } else if (previous != null) {
+            // CÁC LẦN SAU: Bù trừ độ chênh lệch kích thước để giữ nguyên trọng tâm ảnh
+            compensateMatrixForNewBitmap(previous, bitmap)
         }
 
         if (animate && previous != null) {
             previousBitmap = previous
+            // Lưu lại ma trận của ảnh cũ ngay tại khoảnh khắc crossfade bắt đầu
+            // Để dù user có kéo ảnh mới đi, ảnh mờ cũ (đang fade out) vẫn dính vào ảnh mới
+            previousMatrix.set(displayMatrix)
+
             crossfadeProgress = 0f
             startCrossfadeAnimation()
         } else {
@@ -71,6 +75,26 @@ class ZoomableStickerView @JvmOverloads constructor(
             crossfadeProgress = 1f
             invalidate()
         }
+    }
+
+    /**
+     * THUẬT TOÁN BÙ TRỪ TÂM ẢNH:
+     * Khi ảnh mới to/nhỏ hơn ảnh cũ (do thêm viền), nếu áp dụng y xì matrix cũ, ảnh mới sẽ bị lệch góc.
+     * Ta cần dịch chuyển matrix ngược lại (lên trên, sang trái) một đoạn bằng đúng nửa độ chênh lệch kích thước,
+     * nhân với Scale hiện tại, để ảnh mới "mọc ra" từ chính giữa ảnh cũ.
+     */
+    private fun compensateMatrixForNewBitmap(oldBitmap: Bitmap, newBitmap: Bitmap) {
+        val currentScale = currentMatrixScale()
+
+        // Tính chênh lệch kích thước thực tế giữa 2 ảnh
+        val dw = newBitmap.width - oldBitmap.width
+        val dh = newBitmap.height - oldBitmap.height
+
+        // Dịch chuyển ma trận lên trên/sang trái để giữ tâm cố định
+        val dx = -(dw / 2f) * currentScale
+        val dy = -(dh / 2f) * currentScale
+
+        displayMatrix.postTranslate(dx, dy)
     }
 
     private fun startCrossfadeAnimation() {
@@ -86,9 +110,7 @@ class ZoomableStickerView @JvmOverloads constructor(
         }
     }
 
-    /** Đưa ảnh về giữa view, scale vừa khít (fit-center) — gọi khi load ảnh lần đầu. */
-    fun resetTransformToFit(bitmap: Bitmap? = currentBitmap ) {
-
+    fun resetTransformToFit(bitmap: Bitmap? = currentBitmap) {
         val targetBitmap = bitmap ?: return
 
         if (width <= 0 || height <= 0 || targetBitmap.width <= 0 || targetBitmap.height <= 0) return
@@ -121,20 +143,35 @@ class ZoomableStickerView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        // 1. Vẽ nền caro
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), checkerPaint)
 
         val curr = currentBitmap ?: return
         val prev = previousBitmap
 
+        // 2. Vẽ ảnh cũ đang phai đi (Fade Out)
+        // Dùng previousMatrix (đã tính toán bù trừ từ khoảnh khắc bắt đầu hiệu ứng)
         if (prev != null && crossfadeProgress < 1f) {
+
+            // Tính toán lại previousMatrix nếu người dùng đang di chuyển ảnh lúc crossfade diễn ra
+            val tempMatrix = Matrix(displayMatrix)
+            val currScale = currentMatrixScale()
+            val dw = curr.width - prev.width
+            val dh = curr.height - prev.height
+            val dx = (dw / 2f) * currScale
+            val dy = (dh / 2f) * currScale
+            tempMatrix.postTranslate(dx, dy)
+
             bitmapPaintPrevious.alpha = ((1f - crossfadeProgress) * 255).toInt()
-            canvas.drawBitmap(prev, displayMatrix, bitmapPaintPrevious)
+            canvas.drawBitmap(prev, tempMatrix, bitmapPaintPrevious)
         }
 
+        // 3. Vẽ ảnh mới đang hiện lên (Fade In)
         bitmapPaintCurrent.alpha = (crossfadeProgress * 255).toInt().coerceAtLeast(if (prev == null) 255 else 0)
         canvas.drawBitmap(curr, displayMatrix, bitmapPaintCurrent)
     }
 
+    // ---------- Paint Caro ----------
     private fun buildCheckerPaint(): Paint {
         val tilePx = (CHECKER_TILE_DP * resources.displayMetrics.density).toInt().coerceAtLeast(4)
         val tile = Bitmap.createBitmap(tilePx * 2, tilePx * 2, Bitmap.Config.ARGB_8888)
@@ -152,7 +189,6 @@ class ZoomableStickerView @JvmOverloads constructor(
     }
 
     // ---------- Touch: pinch zoom + pan ----------
-
     override fun onTouchEvent(event: MotionEvent): Boolean {
         scaleGestureDetector.onTouchEvent(event)
 
@@ -171,13 +207,11 @@ class ZoomableStickerView @JvmOverloads constructor(
                     lastTouchY = cy
                     invalidate()
                 } else {
-                    // Đang scale: vẫn cập nhật điểm tham chiếu để không bị giật khi buông 1 ngón.
                     lastTouchX = averageX(event)
                     lastTouchY = averageY(event)
                 }
             }
             MotionEvent.ACTION_POINTER_UP -> {
-                // Còn lại 1 ngón sau khi nhả bớt -> cập nhật lại điểm gốc để pan tiếp không giật.
                 val remainingIndex = if (event.actionIndex == 0) 1 else 0
                 if (remainingIndex < event.pointerCount) {
                     lastTouchX = event.getX(remainingIndex)
@@ -207,7 +241,6 @@ class ZoomableStickerView @JvmOverloads constructor(
         override fun onScale(detector: ScaleGestureDetector): Boolean {
             val currentScale = currentMatrixScale()
             var factor = detector.scaleFactor
-            // Chặn scale vượt giới hạn min/max để tránh phóng quá to/nhỏ.
             val targetScale = (currentScale * factor).coerceIn(MIN_SCALE, MAX_SCALE)
             factor = targetScale / currentScale
 

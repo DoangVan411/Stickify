@@ -34,7 +34,7 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent" />
 
-        <com.jetpack.stickify.presentation.ui.cutimage.ContourOverlayView
+        <com.jetpack.stickify.presentation.ui.cut_image.ContourOverlayView
             android:id="@+id/overlayView"
             android:layout_width="0dp"
             android:layout_height="0dp"

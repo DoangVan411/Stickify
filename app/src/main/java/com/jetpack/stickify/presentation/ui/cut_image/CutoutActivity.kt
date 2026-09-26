@@ -1,15 +1,12 @@
-package com.jetpack.stickify.presentation.ui.cutimage
+package com.jetpack.stickify.presentation.ui.cut_image
 
 import android.content.Intent
-import android.content.res.Resources
 import android.graphics.Bitmap
-import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
 import android.widget.ImageButton
-import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -18,14 +15,11 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.ActivityCutoutBinding
-import com.jetpack.stickify.presentation.ui.cutimage.ContourUtils
-import com.jetpack.stickify.presentation.ui.cutimage.ImageUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.core.graphics.toColorInt
-import com.jetpack.stickify.presentation.ui.editsticker.StickerEditActivity
-import io.ktor.sse.COLON
+import com.jetpack.stickify.presentation.ui.edit_sticker.StickerEditActivity
 
 /**
  * Màn hình "Chọn vùng ảnh":

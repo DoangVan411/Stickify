@@ -1,5 +1,4 @@
-package com.jetpack.stickify.presentation.ui.editsticker.custom_view
-import android.animation.ValueAnimator
+package com.jetpack.stickify.presentation.ui.edit_sticker.custom_view
 import android.content.Context
 import android.graphics.Color
 import android.util.AttributeSet
@@ -9,8 +8,6 @@ import android.view.animation.OvershootInterpolator
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import com.jetpack.stickify.R
 
 

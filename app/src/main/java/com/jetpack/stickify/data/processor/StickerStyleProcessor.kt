@@ -1,4 +1,4 @@
-package com.jetpack.stickify.presentation.ui.editsticker
+package com.jetpack.stickify.data.processor
 
 import android.graphics.Bitmap
 import android.graphics.BlurMaskFilter
@@ -11,8 +11,11 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.graphics.PorterDuffXfermode
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * Các thuật toán tạo biến thể sticker từ ảnh đã cắt (PNG có alpha):
@@ -246,12 +249,14 @@ object StickerStyleProcessor {
         val b = Color.blue(borderColor) / 255f
 
         // Thuật toán ColorMatrix "Thần thánh" để khử răng cưa và ép nét đứt thành Solid
-        val colorMatrix = ColorMatrix(floatArrayOf(
-            0f, 0f, 0f, 0f, r * 255f,
-            0f, 0f, 0f, 0f, g * 255f,
-            0f, 0f, 0f, 0f, b * 255f,
-            0f, 0f, 0f, 30f, -1500f // Ngưỡng cắt nét Alpha (Threshold)
-        ))
+        val colorMatrix = ColorMatrix(
+            floatArrayOf(
+                0f, 0f, 0f, 0f, r * 255f,
+                0f, 0f, 0f, 0f, g * 255f,
+                0f, 0f, 0f, 0f, b * 255f,
+                0f, 0f, 0f, 30f, -1500f // Ngưỡng cắt nét Alpha (Threshold)
+            )
+        )
         val thresholdPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             colorFilter = ColorMatrixColorFilter(colorMatrix)
         }
@@ -286,6 +291,121 @@ object StickerStyleProcessor {
         return result
     }
 
+    fun addCustomStickerBorder(
+        source: Bitmap,
+        borderColor: Int = Color.WHITE,
+        borderThickness: Float = 30f,
+        distancePadding: Float = 20f,
+        shadowRadius: Float = 15f,
+        shadowDx: Float = 6f,
+        shadowDy: Float = 6f,
+        shadowColor: Int = Color.parseColor("#4D000000") // Đen mờ 30%
+    ): Bitmap {
+
+        // Tổng độ dày = Khoảng cách (trong suốt) + Bề dày viền
+        val totalThickness = distancePadding + borderThickness
+
+        // Tính toán Margin rộng rãi (Dùng cho cả 4 phía)
+        val margin = (totalThickness * 2 + shadowRadius * 2 + max(abs(shadowDx), abs(shadowDy))).toInt()
+        val dstW = source.width + margin * 2
+        val dstH = source.height + margin * 2
+
+        // Trích xuất Mask nguyên bản (chỉ lấy hình dáng, không lấy màu)
+        val originalMask = source.extractAlpha()
+
+        // ==========================================
+        // BƯỚC 1: TẠO BỆ ĐỠ ĐẶC MƯỢT BẰNG KỸ THUẬT "DẬP" (DILATION)
+        // Kỹ thuật này giữ được độ cong mượt tuyệt đối của ảnh gốc
+        // ==========================================
+        val solidBorderBmp = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
+        val solidBorderCanvas = Canvas(solidBorderBmp)
+
+        val colorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = borderColor
+        }
+
+        // Vẽ mask ban đầu ở trung tâm
+        solidBorderCanvas.drawBitmap(originalMask, margin.toFloat(), margin.toFloat(), colorPaint)
+
+        // Dập mask theo hình tròn xung quanh tâm để tạo viền dày
+        // Bán kính dập chính là tổng độ dày mong muốn
+        if (totalThickness > 0) {
+            val steps = 36 // Tăng số lượng step nếu độ dày rất lớn để viền mịn hơn (tối đa 36-72)
+            val angleStep = (2 * Math.PI) / steps
+            for (i in 0 until steps) {
+                val dx = (totalThickness * cos(i * angleStep)).toFloat()
+                val dy = (totalThickness * sin(i * angleStep)).toFloat()
+                solidBorderCanvas.drawBitmap(
+                    originalMask,
+                    margin + dx,
+                    margin + dy,
+                    colorPaint
+                )
+            }
+        }
+
+        // ==========================================
+        // BƯỚC 2: KHOÉT LỖ VÙNG KHOẢNG CÁCH (DISTANCE PADDING)
+        // ==========================================
+        if (distancePadding > 0f) {
+            val cutoutBmp = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
+            val cutoutCanvas = Canvas(cutoutBmp)
+
+            // Vẽ lớp khoét ban đầu ở giữa
+            cutoutCanvas.drawBitmap(originalMask, margin.toFloat(), margin.toFloat(), colorPaint)
+
+            // Dập để tạo lớp khoét dày bằng distancePadding
+            val cutoutSteps = 36
+            val cutoutAngleStep = (2 * Math.PI) / cutoutSteps
+            for (i in 0 until cutoutSteps) {
+                val dx = (distancePadding * cos(i * cutoutAngleStep)).toFloat()
+                val dy = (distancePadding * sin(i * cutoutAngleStep)).toFloat()
+                cutoutCanvas.drawBitmap(
+                    originalMask,
+                    margin + dx,
+                    margin + dy,
+                    colorPaint
+                )
+            }
+
+            // Khoét lớp viền to (bước 1) bằng lớp đục lỗ vừa tạo
+            val clearPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OUT)
+            }
+            solidBorderCanvas.drawBitmap(cutoutBmp, 0f, 0f, clearPaint)
+            cutoutBmp.recycle()
+        }
+
+        // ==========================================
+        // BƯỚC 3: LẮP RÁP CÁC LỚP VÀO ẢNH CUỐI CÙNG
+        // ==========================================
+        val result = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
+        val finalCanvas = Canvas(result)
+
+        // 3.1: VẼ BÓNG ĐỔ (SHADOW)
+        val solidBorderAlpha = solidBorderBmp.extractAlpha()
+        val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = shadowColor
+            maskFilter = BlurMaskFilter(shadowRadius, BlurMaskFilter.Blur.NORMAL)
+        }
+        finalCanvas.drawBitmap(solidBorderAlpha, shadowDx, shadowDy, shadowPaint)
+
+        // 3.2: ĐẶT LỚP VIỀN LÊN (Đã được khoét nếu có khoảng cách)
+        finalCanvas.drawBitmap(solidBorderBmp, 0f, 0f, null)
+
+        // 3.3: ĐẶT ẢNH CHỦ THỂ VÀO GIỮA
+        finalCanvas.drawBitmap(source, margin.toFloat(), margin.toFloat(), null)
+
+        // ==========================================
+        // BƯỚC 4: GIẢI PHÓNG RAM
+        // ==========================================
+        originalMask.recycle()
+        solidBorderBmp.recycle()
+        solidBorderAlpha.recycle()
+
+        return result
+    }
+
     /**
      * Hiệu ứng hoạt hình đơn giản: posterize màu (giảm số cấp mỗi kênh RGB) để tạo mảng màu
      * phẳng, cộng thêm viền nét tối tại vùng có độ chênh sáng lớn (biên chi tiết khuôn mặt,
@@ -294,9 +414,10 @@ object StickerStyleProcessor {
     fun cartoonify(
         source: Bitmap,
         posterizeLevels: Int = 6,
-        edgeThreshold: Int = 28,
+        edgeThreshold: Float = 80f, // Tăng threshold do dùng thuật toán Sobel mạnh hơn
         maxWorkingDimension: Int = 900
     ): Bitmap {
+        // Tùy thuộc vào hàm downscaleIfNeeded của bạn, tôi giữ nguyên logic resize
         val working = downscaleIfNeeded(source, maxWorkingDimension)
         val w = working.width
         val h = working.height
@@ -304,7 +425,7 @@ object StickerStyleProcessor {
         val pixels = IntArray(w * h)
         working.getPixels(pixels, 0, w, 0, 0, w, h)
 
-        // Luminance (độ sáng) từng pixel, dùng để dò biên.
+        // 1. Tính toán Luminance (Độ sáng) cho toàn ảnh để dò biên
         val luminance = IntArray(w * h)
         for (i in pixels.indices) {
             val p = pixels[i]
@@ -314,54 +435,98 @@ object StickerStyleProcessor {
             luminance[i] = (0.299f * r + 0.587f * g + 0.114f * b).toInt()
         }
 
-        val step = 255 / (posterizeLevels - 1)
+        val step = 255f / (posterizeLevels - 1)
         val output = IntArray(w * h)
 
-        for (y in 0 until h) {
-            for (x in 0 until w) {
+        // Chạy loop bỏ qua viền ngoài cùng 1px để tránh lỗi tràn mảng (IndexOutOfBounds)
+        for (y in 1 until h - 1) {
+            for (x in 1 until w - 1) {
                 val idx = y * w + x
                 val p = pixels[idx]
                 val alpha = (p ushr 24) and 0xFF
-                if (alpha == 0) {
-                    output[idx] = 0
+
+                // Bỏ qua các pixel trong suốt để tối ưu hiệu suất
+                if (alpha < 10) {
+                    output[idx] = p
                     continue
                 }
 
-                // Posterize từng kênh màu.
-                val r = posterizeChannel((p shr 16) and 0xFF, step)
-                val g = posterizeChannel((p shr 8) and 0xFF, step)
-                val b = posterizeChannel(p and 0xFF, step)
-
-                // Dò biên bằng sai khác luminance với 4 pixel lân cận (chỉ khi cả 4 đều nằm
-                // trong vùng có alpha, tránh tạo viền giả ngay tại mép cắt của ảnh).
-                var isEdge = false
-                if (x in 1 until w - 1 && y in 1 until h - 1) {
-                    val aLeft = (pixels[idx - 1] ushr 24) and 0xFF
-                    val aRight = (pixels[idx + 1] ushr 24) and 0xFF
-                    val aUp = (pixels[idx - w] ushr 24) and 0xFF
-                    val aDown = (pixels[idx + w] ushr 24) and 0xFF
-                    if (aLeft > 0 && aRight > 0 && aUp > 0 && aDown > 0) {
-                        val gx = abs(luminance[idx + 1] - luminance[idx - 1])
-                        val gy = abs(luminance[idx + w] - luminance[idx - w])
-                        isEdge = (gx + gy) > edgeThreshold
+                // ==========================================
+                // BƯỚC 1: LÀM MỊN & ÉP MÀU (MINI-BLUR + POSTERIZE)
+                // Lấy trung bình cộng màu của 9 pixel xung quanh để khử nhiễu (noise)
+                // ==========================================
+                var sumR = 0; var sumG = 0; var sumB = 0
+                for (dy in -1..1) {
+                    for (dx in -1..1) {
+                        val cp = pixels[(y + dy) * w + (x + dx)]
+                        sumR += (cp shr 16) and 0xFF
+                        sumG += (cp shr 8) and 0xFF
+                        sumB += cp and 0xFF
                     }
                 }
+                val avgR = sumR / 9
+                val avgG = sumG / 9
+                val avgB = sumB / 9
 
-                output[idx] = if (isEdge) {
-                    // Tô tối màu tại biên thay vì vẽ đen tuyệt đối, giữ cảm giác tự nhiên hơn.
-                    val darkR = (r * 0.25f).toInt().coerceIn(0, 255)
-                    val darkG = (g * 0.25f).toInt().coerceIn(0, 255)
-                    val darkB = (b * 0.25f).toInt().coerceIn(0, 255)
-                    (alpha shl 24) or (darkR shl 16) or (darkG shl 8) or darkB
-                } else {
-                    (alpha shl 24) or (r shl 16) or (g shl 8) or b
-                }
+                // Ép màu (Posterize) trên màu đã làm mịn giúp mảng màu phẳng như tranh vẽ
+                val pr = (Math.round(avgR / step) * step).toInt().coerceIn(0, 255)
+                val pg = (Math.round(avgG / step) * step).toInt().coerceIn(0, 255)
+                val pb = (Math.round(avgB / step) * step).toInt().coerceIn(0, 255)
+
+                // ==========================================
+                // BƯỚC 2: DÒ BIÊN BẰNG THUẬT TOÁN SOBEL 3x3
+                // Tạo ra đường viền nét, dày và liền mạch hơn
+                // ==========================================
+                val tl = luminance[(y - 1) * w + (x - 1)]
+                val tc = luminance[(y - 1) * w + x]
+                val tr = luminance[(y - 1) * w + (x + 1)]
+                val ml = luminance[y * w + (x - 1)]
+                val mr = luminance[y * w + (x + 1)]
+                val bl = luminance[(y + 1) * w + (x - 1)]
+                val bc = luminance[(y + 1) * w + x]
+                val br = luminance[(y + 1) * w + (x + 1)]
+
+                val gx = (tr + 2 * mr + br) - (tl + 2 * ml + bl)
+                val gy = (bl + 2 * bc + br) - (tl + 2 * tc + tr)
+                val magnitude = sqrt((gx * gx + gy * gy).toDouble()).toFloat()
+
+                // ==========================================
+                // BƯỚC 3: HÒA TRỘN VIỀN MỀM MẠI (ANTI-ALIASING)
+                // Thay vì if (isEdge) cứng nhắc, ta tính độ đậm của viền
+                // ==========================================
+                // Khoảng chia 60f quyết định độ mềm/mờ của viền. Số càng to viền càng êm.
+                val edgeIntensity = ((magnitude - edgeThreshold) / 60f).coerceIn(0f, 1f)
+
+                // Trộn màu Posterize với màu viền tối dựa trên cường độ biên
+                val finalR = (pr * (1 - edgeIntensity) + (pr * 0.25f) * edgeIntensity).toInt()
+                val finalG = (pg * (1 - edgeIntensity) + (pg * 0.25f) * edgeIntensity).toInt()
+                val finalB = (pb * (1 - edgeIntensity) + (pb * 0.25f) * edgeIntensity).toInt()
+
+                output[idx] = (alpha shl 24) or (finalR shl 16) or (finalG shl 8) or finalB
             }
+        }
+
+        // Vẽ lại viền 1px ngoài cùng (do bị bỏ qua trong vòng lặp)
+        for (x in 0 until w) {
+            output[x] = pixels[x]
+            output[(h - 1) * w + x] = pixels[(h - 1) * w + x]
+        }
+        for (y in 0 until h) {
+            output[y * w] = pixels[y * w]
+            output[y * w + (w - 1)] = pixels[y * w + (w - 1)]
         }
 
         val result = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         result.setPixels(output, 0, w, 0, 0, w, h)
         return result
+    }
+
+    // Giả định hàm downscale của bạn
+    private fun downscaleIfNeeded(source: Bitmap, maxDimension: Int): Bitmap {
+        val max = Math.max(source.width, source.height)
+        if (max <= maxDimension) return source
+        val scale = maxDimension.toFloat() / max
+        return Bitmap.createScaledBitmap(source, (source.width * scale).toInt(), (source.height * scale).toInt(), true)
     }
 
     private fun posterizeChannel(value: Int, step: Int): Int {
@@ -370,12 +535,4 @@ object StickerStyleProcessor {
         return min(255, max(0, level * step))
     }
 
-    private fun downscaleIfNeeded(source: Bitmap, maxDimension: Int): Bitmap {
-        val longSide = max(source.width, source.height)
-        if (longSide <= maxDimension) return source
-        val scale = maxDimension.toFloat() / longSide
-        val newW = (source.width * scale).toInt().coerceAtLeast(1)
-        val newH = (source.height * scale).toInt().coerceAtLeast(1)
-        return Bitmap.createScaledBitmap(source, newW, newH, true)
-    }
 }

@@ -11,8 +11,6 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.provider.Settings
 import android.view.View
-import android.widget.Button
-import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -20,10 +18,9 @@ import androidx.core.content.ContextCompat
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.ActivityGalleryBinding
-import com.jetpack.stickify.presentation.ui.cutimage.CutoutActivity
+import com.jetpack.stickify.presentation.ui.cut_image.CutoutActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

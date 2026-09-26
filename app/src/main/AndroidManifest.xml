@@ -19,13 +19,13 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Stickify">
         <activity
-            android:name=".presentation.ui.editsticker.StickerEditActivity"
+            android:name=".presentation.ui.edit_sticker.StickerEditActivity"
             android:exported="false" />
         <activity
             android:name=".presentation.ui.gallery.GalleryActivity"
             android:exported="false" />
         <activity
-            android:name=".presentation.ui.cutimage.CutoutActivity"
+            android:name=".presentation.ui.cut_image.CutoutActivity"
             android:exported="false" />
         <activity
             android:name=".presentation.ui.home.HomeActivity"

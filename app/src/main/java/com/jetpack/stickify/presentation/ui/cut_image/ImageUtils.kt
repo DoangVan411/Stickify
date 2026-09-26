@@ -1,4 +1,4 @@
-package com.jetpack.stickify.presentation.ui.cutimage
+package com.jetpack.stickify.presentation.ui.cut_image
 
 
 import android.content.Context

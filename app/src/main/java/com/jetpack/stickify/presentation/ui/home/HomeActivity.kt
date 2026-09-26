@@ -1,5 +1,6 @@
 package com.jetpack.stickify.presentation.ui.home
 
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.os.Bundle
@@ -18,6 +19,7 @@ import androidx.navigation.NavController
 import androidx.navigation.fragment.NavHostFragment
 import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.ActivityHomeBinding
+import com.jetpack.stickify.presentation.ui.gallery.GalleryActivity
 import dagger.hilt.android.AndroidEntryPoint
 
 /**
@@ -69,7 +71,8 @@ class HomeActivity : AppCompatActivity() {
     private fun setupBottomBar() {
         // Nút tròn [+] tạo mới
         binding.btnCreate.setOnClickListener {
-            Toast.makeText(this, getString(R.string.create_sticker), Toast.LENGTH_SHORT).show()
+            var gallery = Intent(this, GalleryActivity::class.java)
+            startActivity(gallery)
         }
 
         // Click các tab

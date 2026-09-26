@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="40dp"
+    android:layout_height="40dp"
+    android:layout_marginEnd="12dp"
+    android:padding="2dp">
+
+    <!-- Viền xanh bọc ngoài (chỉ hiện khi được chọn) -->
+    <View
+        android:id="@+id/vSelectionBorder"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/bg_color_selected"
+        android:visibility="gone" />
+
+    <!-- Hình tròn hiển thị màu -->
+    <View
+        android:id="@+id/vColorFill"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_margin="4dp"
+        android:background="@drawable/bg_color_circle" />
+</FrameLayout>

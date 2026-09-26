@@ -1,5 +1,6 @@
 package com.jetpack.stickify.presentation.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -15,6 +16,7 @@ import androidx.navigation.ui.setupActionBarWithNavController
 import com.google.android.material.snackbar.Snackbar
 import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.ActivityMainBinding
+import com.jetpack.stickify.presentation.ui.gallery.GalleryActivity
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint

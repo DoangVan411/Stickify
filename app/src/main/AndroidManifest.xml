@@ -2,6 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
     <application
         android:name=".StickifyApplication"
         android:allowBackup="true"
@@ -12,23 +18,35 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Stickify">
-
-        <!-- HomeScreen Activity -->
+        <activity
+            android:name=".presentation.ui.edit_sticker.StickerEditActivity"
+            android:exported="false" />
+        <activity
+            android:name=".presentation.ui.gallery.GalleryActivity"
+            android:exported="false" />
+        <activity
+            android:name=".presentation.ui.cut_image.CutoutActivity"
+            android:exported="false" />
         <activity
             android:name=".presentation.ui.home.HomeActivity"
             android:exported="true"
             android:theme="@style/Theme.Stickify">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- Login/Auth Activity -->
-        <activity
-            android:name=".presentation.ui.MainActivity"
-            android:exported="false" />
-
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

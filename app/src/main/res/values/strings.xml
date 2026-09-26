@@ -71,4 +71,10 @@
         libero vel nunc consequat, quis tincidunt nisl eleifend. Cras bibendum enim a justo luctus
         vestibulum. Fusce dictum libero quis erat maximus, vitae volutpat diam dignissim.
     </string>
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_blank_fragment">Hello blank fragment</string>
+    <string name="select_seg_image">Chọn vùng ảnh</string>
+    <string name="btn_edit">Chỉnh sửa</string>
+    <string name="btn_continue">Tiếp tục</string>
+    <string name="select_image_or_video">Chọn ảnh hoặc video</string>
 </resources>

@@ -22,7 +22,7 @@ class FakeProjectDataSource @Inject constructor() {
                 id = "1",
                 name = "Happy run",
                 type = ProjectType.STICKER,
-                source = ProjectOrigin.CREATED,
+                origin = ProjectOrigin.CREATED,
                 thumbnailPath = "recent_1",
                 createdAt = now,
                 updatedAt = now
@@ -31,7 +31,7 @@ class FakeProjectDataSource @Inject constructor() {
                 id = "2",
                 name = "Happy girl",
                 type = ProjectType.STICKER,
-                source = ProjectOrigin.TEMPLATE,
+                origin = ProjectOrigin.TEMPLATE,
                 thumbnailPath = "recent_2",
                 createdAt = now - 2 * 24 * 60 * 60 * 1000L,
                 updatedAt = now - 2 * 24 * 60 * 60 * 1000L
@@ -40,7 +40,7 @@ class FakeProjectDataSource @Inject constructor() {
                 id = "3",
                 name = "Cool dog",
                 type = ProjectType.GIF,
-                source = ProjectOrigin.CREATED,
+                origin = ProjectOrigin.CREATED,
                 thumbnailPath = "recent_3",
                 createdAt = now - 14 * 24 * 60 * 60 * 1000L,
                 updatedAt = now - 14 * 24 * 60 * 60 * 1000L
@@ -49,7 +49,7 @@ class FakeProjectDataSource @Inject constructor() {
                 id = "4",
                 name = "Funny cat",
                 type = ProjectType.ANIMATED_STICKER,
-                source = ProjectOrigin.TEMPLATE,
+                origin = ProjectOrigin.TEMPLATE,
                 thumbnailPath = "recent_4",
                 createdAt = now - 30 * 24 * 60 * 60 * 1000L,
                 updatedAt = now - 30 * 24 * 60 * 60 * 1000L

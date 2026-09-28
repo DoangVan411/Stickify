@@ -9,6 +9,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -27,22 +29,29 @@ class HomeViewModel @Inject constructor(
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
-        loadData()
+        observeRecentProjects()
+        loadExploreTemplates()
     }
 
-    private fun loadData() {
+    private fun observeRecentProjects() {
+        viewModelScope.launch {
+            // Đảm bảo dữ liệu mẫu ban đầu được khởi tạo nếu DB rỗng
+            getRecentProjectsUseCase()
+
+            getRecentProjectsUseCase.getFlow()
+                .catch { e ->
+                    _uiState.update { it.copy(error = e.message) }
+                }
+                .collectLatest { projects ->
+                    _uiState.update { it.copy(recentProjects = projects) }
+                }
+        }
+    }
+
+    private fun loadExploreTemplates() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
 
-            // Load recent projects
-            val recentResult = getRecentProjectsUseCase()
-            recentResult.onSuccess { projects ->
-                _uiState.update { it.copy(recentProjects = projects) }
-            }.onFailure { error ->
-                _uiState.update { it.copy(error = error.message) }
-            }
-
-            // Load explore templates
             val exploreResult = getExploreTemplatesUseCase(_uiState.value.selectedCategory)
             exploreResult.onSuccess { templates ->
                 _uiState.update { it.copy(exploreTemplates = templates, isLoading = false) }
@@ -68,6 +77,6 @@ class HomeViewModel @Inject constructor(
     }
 
     fun refresh() {
-        loadData()
+        loadExploreTemplates()
     }
 }

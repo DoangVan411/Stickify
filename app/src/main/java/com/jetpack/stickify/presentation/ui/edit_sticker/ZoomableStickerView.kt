@@ -2,26 +2,24 @@ package com.jetpack.stickify.presentation.ui.edit_sticker
 
 import android.animation.ValueAnimator
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapShader
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Matrix
-import android.graphics.Paint
-import android.graphics.Shader
+import android.graphics.*
+import android.text.TextPaint
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.animation.LinearInterpolator
+import com.jetpack.stickify.data.source.local.AssetLoader
+import com.jetpack.stickify.domain.model.*
+import kotlinx.coroutines.*
 
 class ZoomableStickerView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
 ) : View(context, attrs) {
 
     companion object {
-        private const val MIN_SCALE = 0.5f
-        private const val MAX_SCALE = 10f // Nới lỏng max scale để dễ xem viền
+        private const val MIN_SCALE = 0.1f
+        private const val MAX_SCALE = 10f
         private const val CROSSFADE_DURATION_MS = 260L
         private const val CHECKER_TILE_DP = 12f
     }
@@ -31,16 +29,20 @@ class ZoomableStickerView @JvmOverloads constructor(
     private var crossfadeProgress = 1f
     private var crossfadeAnimator: ValueAnimator? = null
 
-    // Ma trận hiển thị ảnh hiện tại
+    // Multi-layer rendering support
+    private var projectContent: ProjectContent? = null
+    private var assetLoader: AssetLoader? = null
+    private val layerBitmaps = mutableMapOf<String, Bitmap>()
+    private val viewScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    // Ma trận hiển thị chung
     private val displayMatrix = Matrix()
-
-    // Ma trận hiển thị ảnh trước đó (dành riêng cho quá trình crossfade)
     private val previousMatrix = Matrix()
-
     private var isMatrixInitialized = false
 
     private val bitmapPaintCurrent = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val bitmapPaintPrevious = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
 
     private val checkerPaint: Paint by lazy { buildCheckerPaint() }
 
@@ -51,23 +53,19 @@ class ZoomableStickerView @JvmOverloads constructor(
     private var isPanning = false
 
     fun setBitmap(bitmap: Bitmap, animate: Boolean = true) {
+        projectContent = null
         val previous = currentBitmap
         currentBitmap = bitmap
 
         if (!isMatrixInitialized) {
-            // Lần đầu tiên load ảnh: Căn giữa màn hình
-            resetTransformToFit(bitmap)
+            resetTransformToFit(bitmap.width.toFloat(), bitmap.height.toFloat())
         } else if (previous != null) {
-            // CÁC LẦN SAU: Bù trừ độ chênh lệch kích thước để giữ nguyên trọng tâm ảnh
-            compensateMatrixForNewBitmap(previous, bitmap)
+            compensateMatrixForNewBitmap(previous.width.toFloat(), previous.height.toFloat(), bitmap.width.toFloat(), bitmap.height.toFloat())
         }
 
         if (animate && previous != null) {
             previousBitmap = previous
-            // Lưu lại ma trận của ảnh cũ ngay tại khoảnh khắc crossfade bắt đầu
-            // Để dù user có kéo ảnh mới đi, ảnh mờ cũ (đang fade out) vẫn dính vào ảnh mới
             previousMatrix.set(displayMatrix)
-
             crossfadeProgress = 0f
             startCrossfadeAnimation()
         } else {
@@ -77,23 +75,45 @@ class ZoomableStickerView @JvmOverloads constructor(
         }
     }
 
-    /**
-     * THUẬT TOÁN BÙ TRỪ TÂM ẢNH:
-     * Khi ảnh mới to/nhỏ hơn ảnh cũ (do thêm viền), nếu áp dụng y xì matrix cũ, ảnh mới sẽ bị lệch góc.
-     * Ta cần dịch chuyển matrix ngược lại (lên trên, sang trái) một đoạn bằng đúng nửa độ chênh lệch kích thước,
-     * nhân với Scale hiện tại, để ảnh mới "mọc ra" từ chính giữa ảnh cũ.
-     */
-    private fun compensateMatrixForNewBitmap(oldBitmap: Bitmap, newBitmap: Bitmap) {
+    fun setProjectContent(content: ProjectContent, loader: AssetLoader) {
+        currentBitmap = null
+        previousBitmap = null
+        projectContent = content
+        assetLoader = loader
+
+        val canvasWidth = content.canvas.width.toFloat().takeIf { it > 0f } ?: 512f
+        val canvasHeight = content.canvas.height.toFloat().takeIf { it > 0f } ?: 512f
+
+        if (!isMatrixInitialized) {
+            resetTransformToFit(canvasWidth, canvasHeight)
+        }
+
+        // Load bitmaps cho các layer bất đồng bộ
+        viewScope.launch {
+            for (layer in content.layers) {
+                if (layer is DecorationLayer) {
+                    val bmp = loader.loadBitmap(layer.asset)
+                    if (bmp != null) {
+                        layerBitmaps[layer.id] = bmp
+                    }
+                } else if (layer is SubjectLayer) {
+                    val sourceAsset = layer.styledPath?.let { CustomAsset(it) } ?: layer.source
+                    val bmp = loader.loadBitmap(sourceAsset)
+                    if (bmp != null) {
+                        layerBitmaps[layer.id] = bmp
+                    }
+                }
+            }
+            invalidate()
+        }
+    }
+
+    private fun compensateMatrixForNewBitmap(oldW: Float, oldH: Float, newW: Float, newH: Float) {
         val currentScale = currentMatrixScale()
-
-        // Tính chênh lệch kích thước thực tế giữa 2 ảnh
-        val dw = newBitmap.width - oldBitmap.width
-        val dh = newBitmap.height - oldBitmap.height
-
-        // Dịch chuyển ma trận lên trên/sang trái để giữ tâm cố định
+        val dw = newW - oldW
+        val dh = newH - oldH
         val dx = -(dw / 2f) * currentScale
         val dy = -(dh / 2f) * currentScale
-
         displayMatrix.postTranslate(dx, dy)
     }
 
@@ -110,14 +130,12 @@ class ZoomableStickerView @JvmOverloads constructor(
         }
     }
 
-    fun resetTransformToFit(bitmap: Bitmap? = currentBitmap) {
-        val targetBitmap = bitmap ?: return
+    fun resetTransformToFit(contentWidth: Float = 512f, contentHeight: Float = 512f) {
+        if (width <= 0 || height <= 0 || contentWidth <= 0f || contentHeight <= 0f) return
 
-        if (width <= 0 || height <= 0 || targetBitmap.width <= 0 || targetBitmap.height <= 0) return
-
-        val scale = min(width.toFloat() / targetBitmap.width, height.toFloat() / targetBitmap.height)
-        val dx = (width - targetBitmap.width * scale) / 2f
-        val dy = (height - targetBitmap.height * scale) / 2f
+        val scale = min(width.toFloat() / contentWidth, height.toFloat() / contentHeight)
+        val dx = (width - contentWidth * scale) / 2f
+        val dy = (height - contentHeight * scale) / 2f
 
         displayMatrix.reset()
         displayMatrix.postScale(scale, scale)
@@ -132,13 +150,15 @@ class ZoomableStickerView @JvmOverloads constructor(
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         if (!isMatrixInitialized) {
-            currentBitmap?.let { resetTransformToFit(it) }
+            currentBitmap?.let { resetTransformToFit(it.width.toFloat(), it.height.toFloat()) }
+                ?: projectContent?.let { resetTransformToFit(it.canvas.width.toFloat(), it.canvas.height.toFloat()) }
         }
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         crossfadeAnimator?.cancel()
+        viewScope.cancel()
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -146,29 +166,81 @@ class ZoomableStickerView @JvmOverloads constructor(
         // 1. Vẽ nền caro
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), checkerPaint)
 
-        val curr = currentBitmap ?: return
-        val prev = previousBitmap
+        canvas.save()
+        canvas.concat(displayMatrix)
 
-        // 2. Vẽ ảnh cũ đang phai đi (Fade Out)
-        // Dùng previousMatrix (đã tính toán bù trừ từ khoảnh khắc bắt đầu hiệu ứng)
-        if (prev != null && crossfadeProgress < 1f) {
+        // 2. Nếu có projectContent (Multi-layer mode từ Room DB)
+        val content = projectContent
+        if (content != null) {
+            for (layer in content.layers) {
+                if (!layer.visible) continue
+                drawLayer(canvas, layer)
+            }
+        } else {
+            // 3. Single bitmap preview mode (Legacy Cutout / SharedViewModel)
+            val curr = currentBitmap
+            val prev = previousBitmap
 
-            // Tính toán lại previousMatrix nếu người dùng đang di chuyển ảnh lúc crossfade diễn ra
-            val tempMatrix = Matrix(displayMatrix)
-            val currScale = currentMatrixScale()
-            val dw = curr.width - prev.width
-            val dh = curr.height - prev.height
-            val dx = (dw / 2f) * currScale
-            val dy = (dh / 2f) * currScale
-            tempMatrix.postTranslate(dx, dy)
-
-            bitmapPaintPrevious.alpha = ((1f - crossfadeProgress) * 255).toInt()
-            canvas.drawBitmap(prev, tempMatrix, bitmapPaintPrevious)
+            if (prev != null && crossfadeProgress < 1f) {
+                bitmapPaintPrevious.alpha = ((1f - crossfadeProgress) * 255).toInt()
+                canvas.drawBitmap(prev, 0f, 0f, bitmapPaintPrevious)
+            }
+            if (curr != null) {
+                bitmapPaintCurrent.alpha = (crossfadeProgress * 255).toInt().coerceAtLeast(if (prev == null) 255 else 0)
+                canvas.drawBitmap(curr, 0f, 0f, bitmapPaintCurrent)
+            }
         }
 
-        // 3. Vẽ ảnh mới đang hiện lên (Fade In)
-        bitmapPaintCurrent.alpha = (crossfadeProgress * 255).toInt().coerceAtLeast(if (prev == null) 255 else 0)
-        canvas.drawBitmap(curr, displayMatrix, bitmapPaintCurrent)
+        canvas.restore()
+    }
+
+    private fun drawLayer(canvas: Canvas, layer: Layer) {
+        canvas.save()
+        val transform = layer.transform
+
+        // Áp dụng Transform của Layer (cx, cy, scale, rotation, opacity, flipX)
+        canvas.translate(transform.cx, transform.cy)
+        canvas.scale(if (transform.flipX) -transform.scale else transform.scale, transform.scale)
+        canvas.rotate(transform.rotationDeg)
+
+        val alphaInt = (transform.opacity.coerceIn(0f, 1f) * 255).toInt()
+
+        when (layer) {
+            is DecorationLayer -> {
+                val bmp = layerBitmaps[layer.id]
+                if (bmp != null && !bmp.isRecycled) {
+                    bitmapPaintCurrent.alpha = alphaInt
+                    val left = -bmp.width / 2f
+                    val top = -bmp.height / 2f
+                    canvas.drawBitmap(bmp, left, top, bitmapPaintCurrent)
+                }
+            }
+            is SubjectLayer -> {
+                val bmp = layerBitmaps[layer.id]
+                if (bmp != null && !bmp.isRecycled) {
+                    bitmapPaintCurrent.alpha = alphaInt
+                    val left = -bmp.width / 2f
+                    val top = -bmp.height / 2f
+                    canvas.drawBitmap(bmp, left, top, bitmapPaintCurrent)
+                }
+            }
+            is TextLayer -> {
+                textPaint.color = layer.colorArgb
+                textPaint.textSize = 48f * layer.fontSizeRatio.coerceAtLeast(0.1f)
+                textPaint.isFakeBoldText = layer.bold
+                textPaint.textSkewX = if (layer.italic) -0.25f else 0f
+                textPaint.alpha = alphaInt
+
+                val text = layer.content
+                val textWidth = textPaint.measureText(text)
+                canvas.drawText(text, -textWidth / 2f, 0f, textPaint)
+            }
+            is EffectLayer -> {
+                // Effect rendering
+            }
+        }
+
+        canvas.restore()
     }
 
     // ---------- Paint Caro ----------

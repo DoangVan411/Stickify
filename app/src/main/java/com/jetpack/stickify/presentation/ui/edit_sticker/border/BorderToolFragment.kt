@@ -55,8 +55,8 @@ class BorderToolFragment : Fragment() {
     }
 
     private fun setBorderInit() {
-        val thickness = sharedViewModel.currentBorderThickness.value ?: 30
-        val distance = sharedViewModel.currentBorderDistance.value ?: 20
+        val thickness = 20
+        val distance = 0
         val color = sharedViewModel.currentBorderColor.value ?: Color.WHITE
         sharedViewModel.updateBorderConfig(thickness, distance, color)
     }

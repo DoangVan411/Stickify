@@ -1,5 +1,6 @@
 package com.jetpack.stickify.presentation.ui.home
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -14,6 +15,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.FragmentHomeBinding
 import com.jetpack.stickify.domain.model.ExploreCategory
+import com.jetpack.stickify.presentation.ui.edit_sticker.StickerEditActivity
 import com.jetpack.stickify.presentation.ui.home.adapter.ExploreCategoryAdapter
 import com.jetpack.stickify.presentation.ui.home.adapter.ExploreTemplateAdapter
 import com.jetpack.stickify.presentation.ui.home.adapter.HorizontalSpaceItemDecoration
@@ -55,9 +57,14 @@ class HomeFragment : Fragment() {
 
     private fun setupRecyclerViews() {
         // Recent Projects - Horizontal (vừa vặn 3 item trên màn hình)
-        recentAdapter = RecentProjectAdapter { project ->
-            // TODO: Navigate to project editor
-        }
+        recentAdapter = RecentProjectAdapter(
+            onItemClick = { projectId ->
+                val intent = Intent(requireContext(), StickerEditActivity::class.java).apply {
+                    putExtra(StickerEditActivity.EXTRA_PROJECT_ID, projectId)
+                }
+                startActivity(intent)
+            }
+        )
         val spacePx = resources.getDimensionPixelSize(R.dimen.spacing_sm)
         binding.rvRecentProjects.apply {
             layoutManager = LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false)

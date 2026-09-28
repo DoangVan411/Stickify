@@ -1,14 +1,12 @@
 package com.jetpack.stickify.presentation.ui.edit_sticker
 
+import android.content.Context
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jetpack.stickify.data.source.local.AssetLoader
-import com.jetpack.stickify.domain.model.EditAction
-import com.jetpack.stickify.domain.model.EditorSession
-import com.jetpack.stickify.domain.model.ProjectContent
-import com.jetpack.stickify.domain.model.ProjectOrigin
-import com.jetpack.stickify.domain.model.ProjectType
+import com.jetpack.stickify.domain.model.*
 import com.jetpack.stickify.domain.usecase.GetProjectByIdUseCase
 import com.jetpack.stickify.domain.usecase.SaveProjectUseCase
 import com.jetpack.stickify.domain.usecase.UpdateProjectThumbnailUseCase
@@ -18,6 +16,8 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 import javax.inject.Inject
 
 /**
@@ -39,7 +39,7 @@ data class StickerEditUiState(
 
 /**
  * ViewModel quản lý logic khôi phục EditorSession (bao gồm ProjectContent và EditHistory),
- * thực thi EditAction, Undo/Redo, và cập nhật thumbnail/lưu dự án.
+ * thực thi EditAction, Undo/Redo, quản lý Decorations và cập nhật thumbnail/lưu dự án.
  */
 @HiltViewModel
 class StickerEditViewModel @Inject constructor(
@@ -51,6 +51,28 @@ class StickerEditViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(StickerEditUiState())
     val uiState: StateFlow<StickerEditUiState> = _uiState.asStateFlow()
+
+    // Danh sách decoration vẽ trang trí (Drawn)
+    private val _drawnDecorations = MutableStateFlow(
+        listOf(
+            BuiltinAsset("heart.png", "pack_default"),
+            BuiltinAsset("img_decorate_01.png", "pack_default")
+        )
+    )
+    val drawnDecorations: StateFlow<List<BuiltinAsset>> = _drawnDecorations.asStateFlow()
+
+    // Danh sách nhãn (Labels / Stickers)
+    private val _labelDecorations = MutableStateFlow(
+        listOf(
+            BuiltinAsset("ic_sample_01.png", "pack_comic"),
+            BuiltinAsset("ic_sample_02.png", "pack_comic"),
+            BuiltinAsset("ic_sample_03.png", "pack_comic"),
+            BuiltinAsset("ic_sample_04.png", "pack_comic"),
+            BuiltinAsset("heart.png", "pack_more"),
+            BuiltinAsset("img_decorate_01.png", "pack_more")
+        )
+    )
+    val labelDecorations: StateFlow<List<BuiltinAsset>> = _labelDecorations.asStateFlow()
 
     fun loadProject(projectId: String) {
         if (projectId.isBlank()) return
@@ -106,6 +128,44 @@ class StickerEditViewModel @Inject constructor(
                 canUndo = currentSession.history.canUndo,
                 canRedo = currentSession.history.canRedo
             )
+        }
+    }
+
+    fun addDecorationLayer(assetRef: AssetRef) {
+        val currentSession = _uiState.value.editorSession
+        val newLayerId = "layer_dec_${System.currentTimeMillis()}"
+        val newLayer = DecorationLayer(
+            id = newLayerId,
+            transform = Transform(cx = 256f, cy = 256f, scale = 1f),
+            visible = true,
+            asset = assetRef,
+            category = DecorationCategory.DRAWN
+        )
+        val action = AddLayerAction(layer = newLayer, index = currentSession.content.layers.size)
+        performAction(action)
+    }
+
+    fun addCustomDecoration(context: Context, uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val inputStream = context.contentResolver.openInputStream(uri) ?: return@launch
+                val customDir = File(context.filesDir, "custom_decorations")
+                if (!customDir.exists()) customDir.mkdirs()
+                val fileName = "custom_${System.currentTimeMillis()}.png"
+                val file = File(customDir, fileName)
+                FileOutputStream(file).use { output ->
+                    inputStream.copyTo(output)
+                }
+
+                val relativePath = "custom_decorations/$fileName"
+                val customAsset = CustomAsset(relativePath)
+
+                withContext(Dispatchers.Main) {
+                    addDecorationLayer(customAsset)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 

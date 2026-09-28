@@ -15,6 +15,7 @@ import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.ActivityStickerEditBinding
 import com.jetpack.stickify.presentation.ui.edit_sticker.border.BorderToolFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.custom_view.EditorPanelView
+import com.jetpack.stickify.presentation.ui.edit_sticker.decoration.DecorationFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.suggestion.SuggestionFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextToolFragment
 import dagger.hilt.android.AndroidEntryPoint
@@ -44,6 +45,7 @@ class StickerEditActivity : AppCompatActivity() {
     private var suggestionFragment: SuggestionFragment? = null
     private var textToolFragment: TextToolFragment? = null
     private var borderToolFragment: BorderToolFragment? = null
+    private var decorationFragment: DecorationFragment? = null
 
     private var currentProjectId: String? = null
 
@@ -206,6 +208,8 @@ class StickerEditActivity : AppCompatActivity() {
         suggestionFragment?.let { transaction.hide(it) }
         textToolFragment?.let { transaction.hide(it) }
         borderToolFragment?.let { transaction.hide(it) }
+        decorationFragment?.let { transaction.hide(it) }
+
 
         when (position) {
             0 -> {
@@ -222,6 +226,14 @@ class StickerEditActivity : AppCompatActivity() {
                     transaction.add(R.id.featureContainer, textToolFragment!!, "TEXT_TOOL")
                 } else {
                     transaction.show(textToolFragment!!)
+                }
+            }
+            3->{
+                if (decorationFragment == null) {
+                    decorationFragment = DecorationFragment()
+                    transaction.add(R.id.featureContainer, decorationFragment!!, "DECORATION")
+                } else {
+                    transaction.show(decorationFragment!!)
                 }
             }
             4 -> {

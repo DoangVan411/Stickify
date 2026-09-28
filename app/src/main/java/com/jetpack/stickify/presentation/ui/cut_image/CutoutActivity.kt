@@ -8,6 +8,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.ImageButton
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.databinding.DataBindingUtil
@@ -52,6 +53,26 @@ class CutoutActivity : AppCompatActivity() {
 
     private var sourceBitmap: Bitmap? = null
     private var isEditMode = false
+
+    private val editStickerLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            setResult(RESULT_OK, result.data)
+            finish()
+        } else {
+            if (sourceBitmap != null) {
+                setButtonsEnabled(true)
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (sourceBitmap != null) {
+            setButtonsEnabled(true)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -178,7 +199,7 @@ class CutoutActivity : AppCompatActivity() {
                     putExtra(EXTRA_CROPPED_IMAGE_URI, croppedUri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                startActivity(intent)
+                editStickerLauncher.launch(intent)
             } catch (e: Exception) {
                 Toast.makeText(this@CutoutActivity, "Lỗi khi cắt ảnh: ${e.message}", Toast.LENGTH_LONG).show()
                 setButtonsEnabled(true)

@@ -2,7 +2,9 @@ package com.jetpack.stickify.data.repository
 
 import com.jetpack.stickify.data.source.local.FakeProjectDataSource
 import com.jetpack.stickify.domain.model.ExploreCategory
+import com.jetpack.stickify.domain.model.FavoriteSticker
 import com.jetpack.stickify.domain.model.ProjectEntity
+import com.jetpack.stickify.domain.model.StickerPack
 import com.jetpack.stickify.domain.model.StickerTemplate
 import com.jetpack.stickify.domain.repository.ProjectRepository
 import kotlinx.coroutines.delay
@@ -31,6 +33,24 @@ class ProjectRepositoryImpl @Inject constructor(
         return try {
             delay(200) // Giả lập loading
             Result.success(fakeDataSource.getExploreTemplatesByCategory(category))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getFavoriteStickers(): Result<List<FavoriteSticker>> {
+        return try {
+            delay(200)
+            Result.success(fakeDataSource.getFavoriteStickers())
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getStickerPacks(): Result<List<StickerPack>> {
+        return try {
+            delay(200)
+            Result.success(fakeDataSource.getStickerPacks())
         } catch (e: Exception) {
             Result.failure(e)
         }

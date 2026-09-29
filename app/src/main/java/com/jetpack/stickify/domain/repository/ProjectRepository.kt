@@ -1,7 +1,9 @@
 package com.jetpack.stickify.domain.repository
 
 import com.jetpack.stickify.domain.model.ExploreCategory
+import com.jetpack.stickify.domain.model.FavoriteSticker
 import com.jetpack.stickify.domain.model.ProjectEntity
+import com.jetpack.stickify.domain.model.StickerPack
 import com.jetpack.stickify.domain.model.StickerTemplate
 
 /**
@@ -11,4 +13,6 @@ import com.jetpack.stickify.domain.model.StickerTemplate
 interface ProjectRepository {
     suspend fun getRecentProjects(): Result<List<ProjectEntity>>
     suspend fun getExploreTemplates(category: ExploreCategory): Result<List<StickerTemplate>>
+    suspend fun getFavoriteStickers(): Result<List<FavoriteSticker>>
+    suspend fun getStickerPacks(): Result<List<StickerPack>>
 }

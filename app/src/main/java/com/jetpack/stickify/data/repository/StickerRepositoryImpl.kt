@@ -54,4 +54,22 @@ class StickerRepositoryImpl @Inject constructor(
             distancePadding = distance.toFloat()
         )
     }
+
+    override suspend fun saveAnimatedGif(
+        bitmap: Bitmap,
+        animationType: com.jetpack.stickify.domain.model.StickerAnimationType
+    ): String = withContext(Dispatchers.IO) {
+        val frames = com.jetpack.stickify.data.gif.StickerAnimationRenderer.renderFrames(bitmap, animationType)
+        val file = java.io.File(context.cacheDir, "gif_${System.currentTimeMillis()}.gif")
+        val encoder = com.jetpack.stickify.data.gif.AnimatedGifEncoder()
+        encoder.start(java.io.FileOutputStream(file))
+        encoder.setDelay(animationType.frameDelayMs)
+        encoder.setRepeat(0)
+        encoder.setTransparent(Color.TRANSPARENT)
+        for (f in frames) {
+            encoder.addFrame(f)
+        }
+        encoder.finish()
+        return@withContext Uri.fromFile(file).toString()
+    }
 }

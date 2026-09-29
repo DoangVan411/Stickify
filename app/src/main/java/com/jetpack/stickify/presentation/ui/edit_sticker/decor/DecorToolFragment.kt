@@ -72,7 +72,7 @@ class DecorToolFragment : Fragment() {
         val rvDrawnDecor: RecyclerView = view.findViewById(R.id.rvDrawnDecor)
         rvDrawnDecor.layoutManager = GridLayoutManager(requireContext(), 4)
         rvDrawnDecor.adapter = DecorAdapter(drawnDecorItems) { item ->
-            sharedViewModel.addDecor(item.resId)
+            sharedViewModel.selectDrawDecor(item.resId)
         }
 
         // 2. Cài đặt Grid cho Nhãn

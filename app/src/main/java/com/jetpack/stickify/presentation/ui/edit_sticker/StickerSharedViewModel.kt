@@ -64,12 +64,15 @@ class StickerSharedViewModel @Inject constructor(
 
     private val _addedDecorEvent = MutableLiveData<DecorModel?>()
     val addedDecorEvent: LiveData<DecorModel?> get() = _addedDecorEvent
+    private val _drawDecorModeEvent = MutableLiveData<DecorModel?>()
+    val drawDecorModeEvent: LiveData<DecorModel?> get() = _drawDecorModeEvent
 
     fun addDecor(resId: Int) {
         val newDecor = DecorModel(resId = resId)
         val current = _decorList.value.orEmpty().toMutableList()
         current.add(newDecor)
         _decorList.value = current
+        _drawDecorModeEvent.value = null
         _addedDecorEvent.value = newDecor
     }
 
@@ -78,7 +81,12 @@ class StickerSharedViewModel @Inject constructor(
         val current = _decorList.value.orEmpty().toMutableList()
         current.add(newDecor)
         _decorList.value = current
+        _drawDecorModeEvent.value = null
         _addedDecorEvent.value = newDecor
+    }
+
+    fun selectDrawDecor(resId: Int) {
+        _drawDecorModeEvent.value = DecorModel(resId = resId)
     }
 
     fun loadAndPrepareStyles(uriString: String) {

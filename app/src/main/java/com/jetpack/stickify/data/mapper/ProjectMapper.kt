@@ -60,7 +60,7 @@ class ProjectMapper @Inject constructor() {
             type = domain.type,
             origin = domain.origin,
             templateId = domain.templateId,
-            thumbnailPath = domain.thumbnailPath,
+            thumbnailPath = domain.thumbnailPath ?: "",
             exportedPath = domain.exportedPath,
             createdAt = domain.createdAt,
             updatedAt = domain.updatedAt,

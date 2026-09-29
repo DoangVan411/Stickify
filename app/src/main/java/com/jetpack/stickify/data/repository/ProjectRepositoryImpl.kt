@@ -15,6 +15,7 @@ import com.jetpack.stickify.domain.model.StickerTemplate
 import com.jetpack.stickify.domain.repository.ProjectRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
@@ -48,9 +49,6 @@ class ProjectRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun saveProject(project: StickerProject): Result<Unit> {
-        TODO("Not yet implemented")
-    }
 
     override suspend fun saveProject(project: StickerProject): Result<Unit> {
         return try {

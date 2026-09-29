@@ -174,7 +174,7 @@ class ZoomableStickerView @JvmOverloads constructor(
 
         if (!isMatrixInitialized) {
             // Lần đầu tiên load ảnh: Căn giữa màn hình
-            resetTransformToFit(bitmap)
+            resetTransformToFit(bitmap.width.toFloat(), bitmap.height.toFloat())
         } else if (previous != null) {
             // CÁC LẦN SAU: Bù trừ độ chênh lệch kích thước để giữ nguyên trọng tâm ảnh
             compensateMatrixForNewBitmap(previous, bitmap)
@@ -191,6 +191,39 @@ class ZoomableStickerView @JvmOverloads constructor(
         } else {
             previousBitmap = null
             crossfadeProgress = 1f
+            invalidate()
+        }
+    }
+
+    fun setProjectContent(content: ProjectContent, loader: AssetLoader) {
+        currentBitmap = null
+        previousBitmap = null
+        projectContent = content
+        assetLoader = loader
+
+        val canvasWidth = content.canvas.width.toFloat().takeIf { it > 0f } ?: 512f
+        val canvasHeight = content.canvas.height.toFloat().takeIf { it > 0f } ?: 512f
+
+        if (!isMatrixInitialized) {
+            resetTransformToFit(canvasWidth, canvasHeight)
+        }
+
+        // Load bitmaps cho các layer bất đồng bộ
+        viewScope.launch {
+            for (layer in content.layers) {
+                if (layer is DecorationLayer) {
+                    val bmp = loader.loadBitmap(layer.asset)
+                    if (bmp != null) {
+                        layerBitmaps[layer.id] = bmp
+                    }
+                } else if (layer is SubjectLayer) {
+                    val sourceAsset = layer.styledPath?.let { CustomAsset(it) } ?: layer.source
+                    val bmp = loader.loadBitmap(sourceAsset)
+                    if (bmp != null) {
+                        layerBitmaps[layer.id] = bmp
+                    }
+                }
+            }
             invalidate()
         }
     }
@@ -228,14 +261,12 @@ class ZoomableStickerView @JvmOverloads constructor(
         }
     }
 
-    fun resetTransformToFit(bitmap: Bitmap? = currentBitmap) {
-        val targetBitmap = bitmap ?: return
+    fun resetTransformToFit(contentWidth: Float = 512f, contentHeight: Float = 512f) {
+        if (width <= 0 || height <= 0 || contentWidth <= 0f || contentHeight <= 0f) return
 
-        if (width <= 0 || height <= 0 || targetBitmap.width <= 0 || targetBitmap.height <= 0) return
-
-        val scale = min(width.toFloat() / targetBitmap.width, height.toFloat() / targetBitmap.height)
-        val dx = (width - targetBitmap.width * scale) / 2f
-        val dy = (height - targetBitmap.height * scale) / 2f
+        val scale = min(width.toFloat() / contentWidth, height.toFloat() / contentHeight)
+        val dx = (width - contentWidth * scale) / 2f
+        val dy = (height - contentHeight * scale) / 2f
 
         displayMatrix.reset()
         displayMatrix.postScale(scale, scale)
@@ -245,12 +276,18 @@ class ZoomableStickerView @JvmOverloads constructor(
         invalidate()
     }
 
+    fun resetTransformToFit(bitmap: Bitmap? = currentBitmap) {
+        val target = bitmap ?: return
+        resetTransformToFit(target.width.toFloat(), target.height.toFloat())
+    }
+
     private fun min(a: Float, b: Float) = if (a < b) a else b
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         if (!isMatrixInitialized) {
-            currentBitmap?.let { resetTransformToFit(it) }
+            currentBitmap?.let { resetTransformToFit(it.width.toFloat(), it.height.toFloat()) }
+                ?: projectContent?.let { resetTransformToFit(it.canvas.width.toFloat(), it.canvas.height.toFloat()) }
         }
     }
 
@@ -292,114 +329,161 @@ class ZoomableStickerView @JvmOverloads constructor(
         // 1. Vẽ nền caro
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), checkerPaint)
 
-        canvas.save()
-        canvas.concat(displayMatrix)
-
         // 2. Nếu có projectContent (Multi-layer mode từ Room DB)
         val content = projectContent
         if (content != null) {
+            canvas.save()
+            canvas.concat(displayMatrix)
             for (layer in content.layers) {
                 if (!layer.visible) continue
                 drawLayer(canvas, layer)
             }
+            canvas.restore()
         } else {
             // 3. Single bitmap preview mode (Legacy Cutout / SharedViewModel)
-            val curr = currentBitmap
+            val curr = currentBitmap ?: return
             val prev = previousBitmap
 
-        val hasAnim = currentAnimationType.isAnimated
-        if (hasAnim) {
-            canvas.save()
-            val pts = floatArrayOf(curr.width / 2f, curr.height / 2f)
-            displayMatrix.mapPoints(pts)
-            val cx = pts[0]
-            val cy = pts[1]
-            val tf = com.jetpack.stickify.data.gif.StickerAnimationRenderer.getFrameTransform(currentAnimationType, animFrameIndex)
-            val currentScale = currentMatrixScale()
-            // tf: [translateX (ratio of w), translateY (ratio of h), scaleX, scaleY, rotation]
-            canvas.translate(cx + tf[0] * curr.width * currentScale, cy + tf[1] * curr.height * currentScale)
-            canvas.rotate(tf[4])
-            canvas.scale(tf[2], tf[3])
-            canvas.translate(-cx, -cy)
-        }
-
-        // 2. Vẽ ảnh cũ đang phai đi (Fade Out)
-        // Dùng previousMatrix (đã tính toán bù trừ từ khoảnh khắc bắt đầu hiệu ứng)
-        if (prev != null && crossfadeProgress < 1f) {
-
-            // Tính toán lại previousMatrix nếu người dùng đang di chuyển ảnh lúc crossfade diễn ra
-            val tempMatrix = Matrix(displayMatrix)
-            val currScale = currentMatrixScale()
-            val dw = curr.width - prev.width
-            val dh = curr.height - prev.height
-            val dx = (dw / 2f) * currScale
-            val dy = (dh / 2f) * currScale
-            tempMatrix.postTranslate(dx, dy)
-
-            bitmapPaintPrevious.alpha = ((1f - crossfadeProgress) * 255).toInt()
-            canvas.drawBitmap(prev, tempMatrix, bitmapPaintPrevious)
-        }
-
-        // 3. Vẽ ảnh mới đang hiện lên (Fade In)
-        bitmapPaintCurrent.alpha = (crossfadeProgress * 255).toInt().coerceAtLeast(if (prev == null) 255 else 0)
-        canvas.drawBitmap(curr, displayMatrix, bitmapPaintCurrent)
-
-        // 4. Vẽ các vật phẩm Decor
-        val currentScale = currentMatrixScale()
-        val density = resources.displayMetrics.density
-        val deleteRadius = 14f * density
-
-        for (decor in decorItems) {
-            val pts = floatArrayOf(decor.x, decor.y)
-            displayMatrix.mapPoints(pts)
-            val screenX = pts[0]
-            val screenY = pts[1]
-            val screenW = decor.width * decor.scale * currentScale
-            val screenH = decor.height * decor.scale * currentScale
-
-            canvas.save()
-            canvas.translate(screenX, screenY)
-            canvas.rotate(decor.rotation)
-
-            val rect = RectF(-screenW / 2f, -screenH / 2f, screenW / 2f, screenH / 2f)
-            canvas.drawBitmap(decor.bitmap, null, rect, decorPaint)
-
-            if (decor == selectedDecor) {
-                // Khung viền nét đứt khi được chọn
-                canvas.drawRoundRect(rect, 8f * density, 8f * density, decorBorderPaint)
-
-                // 4 chấm tròn ở 4 góc (handles xoay/phóng)
-                val corners = arrayOf(
-                    floatArrayOf(rect.left, rect.top),      // Trên-trái
-                    floatArrayOf(rect.right, rect.top),     // Trên-phải
-                    floatArrayOf(rect.left, rect.bottom),   // Dưới-trái
-                    floatArrayOf(rect.right, rect.bottom)   // Dưới-phải
-                )
-                for (corner in corners) {
-                    canvas.drawCircle(corner[0], corner[1], handleRadius, handleFillPaint)
-                    canvas.drawCircle(corner[0], corner[1], handleRadius, handleStrokePaint)
-                }
-
-                // Nút xoá (thùng rác) — đặt phía trên góc trên-phải
-                val delCx = rect.right + deleteRadius * 0.5f
-                val delCy = rect.top - deleteRadius * 0.9f
-                canvas.drawCircle(delCx, delCy, deleteRadius, deleteBgPaint)
-                val trashIconSize = deleteRadius * 1.2f
-                val trashRect = RectF(
-                    delCx - trashIconSize / 2f,
-                    delCy - trashIconSize / 2f,
-                    delCx + trashIconSize / 2f,
-                    delCy + trashIconSize / 2f
-                )
-                canvas.drawBitmap(trashBitmap, null, trashRect, decorPaint)
+            val hasAnim = currentAnimationType.isAnimated
+            if (hasAnim) {
+                canvas.save()
+                val pts = floatArrayOf(curr.width / 2f, curr.height / 2f)
+                displayMatrix.mapPoints(pts)
+                val cx = pts[0]
+                val cy = pts[1]
+                val tf = com.jetpack.stickify.data.gif.StickerAnimationRenderer.getFrameTransform(currentAnimationType, animFrameIndex)
+                val currentScale = currentMatrixScale()
+                // tf: [translateX (ratio of w), translateY (ratio of h), scaleX, scaleY, rotation]
+                canvas.translate(cx + tf[0] * curr.width * currentScale, cy + tf[1] * curr.height * currentScale)
+                canvas.rotate(tf[4])
+                canvas.scale(tf[2], tf[3])
+                canvas.translate(-cx, -cy)
             }
 
-            canvas.restore()
+            // 2. Vẽ ảnh cũ đang phai đi (Fade Out)
+            if (prev != null && crossfadeProgress < 1f) {
+                val tempMatrix = Matrix(displayMatrix)
+                val currScale = currentMatrixScale()
+                val dw = curr.width - prev.width
+                val dh = curr.height - prev.height
+                val dx = (dw / 2f) * currScale
+                val dy = (dh / 2f) * currScale
+                tempMatrix.postTranslate(dx, dy)
+
+                bitmapPaintPrevious.alpha = ((1f - crossfadeProgress) * 255).toInt()
+                canvas.drawBitmap(prev, tempMatrix, bitmapPaintPrevious)
+            }
+
+            // 3. Vẽ ảnh mới đang hiện lên (Fade In)
+            bitmapPaintCurrent.alpha = (crossfadeProgress * 255).toInt().coerceAtLeast(if (prev == null) 255 else 0)
+            canvas.drawBitmap(curr, displayMatrix, bitmapPaintCurrent)
+
+            // 4. Vẽ các vật phẩm Decor
+            val currentScale = currentMatrixScale()
+            val density = resources.displayMetrics.density
+            val deleteRadius = 14f * density
+
+            for (decor in decorItems) {
+                val pts = floatArrayOf(decor.x, decor.y)
+                displayMatrix.mapPoints(pts)
+                val screenX = pts[0]
+                val screenY = pts[1]
+                val screenW = decor.width * decor.scale * currentScale
+                val screenH = decor.height * decor.scale * currentScale
+
+                canvas.save()
+                canvas.translate(screenX, screenY)
+                canvas.rotate(decor.rotation)
+
+                val rect = RectF(-screenW / 2f, -screenH / 2f, screenW / 2f, screenH / 2f)
+                canvas.drawBitmap(decor.bitmap, null, rect, decorPaint)
+
+                if (decor == selectedDecor) {
+                    // Khung viền nét đứt khi được chọn
+                    canvas.drawRoundRect(rect, 8f * density, 8f * density, decorBorderPaint)
+
+                    // 4 chấm tròn ở 4 góc (handles xoay/phóng)
+                    val corners = arrayOf(
+                        floatArrayOf(rect.left, rect.top),      // Trên-trái
+                        floatArrayOf(rect.right, rect.top),     // Trên-phải
+                        floatArrayOf(rect.left, rect.bottom),   // Dưới-trái
+                        floatArrayOf(rect.right, rect.bottom)   // Dưới-phải
+                    )
+                    for (corner in corners) {
+                        canvas.drawCircle(corner[0], corner[1], handleRadius, handleFillPaint)
+                        canvas.drawCircle(corner[0], corner[1], handleRadius, handleStrokePaint)
+                    }
+
+                    // Nút xoá (thùng rác) — đặt phía trên góc trên-phải
+                    val delCx = rect.right + deleteRadius * 0.5f
+                    val delCy = rect.top - deleteRadius * 0.9f
+                    canvas.drawCircle(delCx, delCy, deleteRadius, deleteBgPaint)
+                    val trashIconSize = deleteRadius * 1.2f
+                    val trashRect = RectF(
+                        delCx - trashIconSize / 2f,
+                        delCy - trashIconSize / 2f,
+                        delCx + trashIconSize / 2f,
+                        delCy + trashIconSize / 2f
+                    )
+                    canvas.drawBitmap(trashBitmap, null, trashRect, decorPaint)
+                }
+
+                canvas.restore()
+            }
+
+            if (hasAnim) {
+                canvas.restore()
+            }
+        }
+    }
+
+    private fun drawLayer(canvas: Canvas, layer: Layer) {
+        canvas.save()
+        val transform = layer.transform
+
+        // Áp dụng Transform của Layer (cx, cy, scale, rotation, opacity, flipX)
+        canvas.translate(transform.cx, transform.cy)
+        canvas.scale(if (transform.flipX) -transform.scale else transform.scale, transform.scale)
+        canvas.rotate(transform.rotationDeg)
+
+        val alphaInt = (transform.opacity.coerceIn(0f, 1f) * 255).toInt()
+
+        when (layer) {
+            is DecorationLayer -> {
+                val bmp = layerBitmaps[layer.id]
+                if (bmp != null && !bmp.isRecycled) {
+                    bitmapPaintCurrent.alpha = alphaInt
+                    val left = -bmp.width / 2f
+                    val top = -bmp.height / 2f
+                    canvas.drawBitmap(bmp, left, top, bitmapPaintCurrent)
+                }
+            }
+            is SubjectLayer -> {
+                val bmp = layerBitmaps[layer.id]
+                if (bmp != null && !bmp.isRecycled) {
+                    bitmapPaintCurrent.alpha = alphaInt
+                    val left = -bmp.width / 2f
+                    val top = -bmp.height / 2f
+                    canvas.drawBitmap(bmp, left, top, bitmapPaintCurrent)
+                }
+            }
+            is TextLayer -> {
+                textPaint.color = layer.colorArgb
+                textPaint.textSize = 48f * layer.fontSizeRatio.coerceAtLeast(0.1f)
+                textPaint.isFakeBoldText = layer.bold
+                textPaint.textSkewX = if (layer.italic) -0.25f else 0f
+                textPaint.alpha = alphaInt
+
+                val text = layer.content
+                val textWidth = textPaint.measureText(text)
+                canvas.drawText(text, -textWidth / 2f, 0f, textPaint)
+            }
+            is EffectLayer -> {
+                // Effect rendering
+            }
         }
 
-        if (hasAnim) {
-            canvas.restore()
-        }
+        canvas.restore()
     }
 
     // ---------- Paint Caro ----------

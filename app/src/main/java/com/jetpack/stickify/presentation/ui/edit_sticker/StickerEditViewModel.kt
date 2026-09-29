@@ -97,7 +97,7 @@ class StickerEditViewModel @Inject constructor(
                                 projectName = project.name,
                                 projectType = project.type,
                                 origin = project.origin,
-                                thumbnailPath = project.thumbnailPath,
+                                thumbnailPath = project.thumbnailPath ?: "recent_1",
                                 editorSession = session,
                                 canUndo = session.history.canUndo,
                                 canRedo = session.history.canRedo

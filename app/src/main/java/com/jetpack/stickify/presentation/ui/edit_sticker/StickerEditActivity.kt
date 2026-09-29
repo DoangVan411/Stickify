@@ -15,16 +15,15 @@ import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.ActivityStickerEditBinding
 import com.jetpack.stickify.presentation.ui.edit_sticker.border.BorderToolFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.custom_view.EditorPanelView
+import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorToolFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.decoration.DecorationFragment
+import com.jetpack.stickify.presentation.ui.edit_sticker.effect.EffectToolFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.suggestion.SuggestionFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextToolFragment
-import dagger.hilt.android.AndroidEntryPoint
-import androidx.activity.viewModels
-import com.jetpack.stickify.presentation.ui.edit_sticker.border.BorderToolFragment
-import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorToolFragment
-import com.jetpack.stickify.presentation.ui.edit_sticker.effect.EffectToolFragment
 import com.jetpack.stickify.domain.model.StickerStyle
 import android.graphics.BitmapFactory
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
 /**
  * Màn hình "Chỉnh sửa" sticker:
@@ -194,16 +193,6 @@ class StickerEditActivity : AppCompatActivity() {
             }
         }
 
-        // Gọi ViewModel thực hiện lưu ảnh (ghép decor nếu có, xuất GIF nếu có animation)
-        binding.btnCreate.setOnClickListener {
-            val baseBitmap = sharedViewModel.styleBitmaps[sharedViewModel.currentStyle.value ?: StickerStyle.ORIGINAL]
-            val finalBitmap = if (baseBitmap != null && binding.zoomableView.hasDecors()) {
-                binding.zoomableView.renderCompositeBitmap(baseBitmap)
-            } else {
-                baseBitmap
-            }
-            sharedViewModel.saveCurrentSticker(finalBitmap)
-        }
         binding.btnRedo.setOnClickListener {
             if (currentProjectId != null) {
                 editViewModel.redo()
@@ -212,11 +201,18 @@ class StickerEditActivity : AppCompatActivity() {
             }
         }
 
+        // Gọi ViewModel thực hiện lưu ảnh (ghép decor nếu có, xuất GIF nếu có animation) hoặc lưu project
         binding.btnCreate.setOnClickListener {
             if (currentProjectId != null) {
                 editViewModel.saveProject()
             } else {
-                sharedViewModel.saveCurrentSticker()
+                val baseBitmap = sharedViewModel.styleBitmaps[sharedViewModel.currentStyle.value ?: StickerStyle.ORIGINAL]
+                val finalBitmap = if (baseBitmap != null && binding.zoomableView.hasDecors()) {
+                    binding.zoomableView.renderCompositeBitmap(baseBitmap)
+                } else {
+                    baseBitmap
+                }
+                sharedViewModel.saveCurrentSticker(finalBitmap)
             }
         }
 
@@ -233,10 +229,10 @@ class StickerEditActivity : AppCompatActivity() {
                 }
             }
         )
-        switchFragment(0)
+        switchFragment("Đề xuất")
     }
 
-    private fun switchFragment(position: Int) {
+    private fun switchFragment(tabName: String) {
         val fragmentManager = supportFragmentManager
         val transaction = fragmentManager.beginTransaction()
 

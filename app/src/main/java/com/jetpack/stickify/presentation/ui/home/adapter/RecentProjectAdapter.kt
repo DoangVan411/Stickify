@@ -1,25 +1,27 @@
 package com.jetpack.stickify.presentation.ui.home.adapter
 
+import android.graphics.BitmapFactory
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.jetpack.stickify.R
 import com.jetpack.stickify.domain.model.ProjectEntity
 import com.jetpack.stickify.domain.model.ProjectType
+import java.io.File
 
 /**
  * Adapter cho danh sách project gần đây (horizontal RecyclerView).
- * Item được thiết kế dạng card tương đồng với item khám phá (explore)
- * và tự động co giãn kích thước để màn hình hiển thị vừa vặn 3 item.
+ * Binding dữ liệu thumbnailPath, name, updatedAt và gửi projectId qua onItemClick.
  */
 class RecentProjectAdapter(
-    private val onItemClick: (ProjectEntity) -> Unit = {},
-    private val onMoreClick: (ProjectEntity) -> Unit = {}
+    private val onItemClick: (projectId: String) -> Unit = {},
+    private val onMoreClick: (project: ProjectEntity) -> Unit = {}
 ) : ListAdapter<ProjectEntity, RecentProjectAdapter.ViewHolder>(DiffCallback()) {
 
     private var calculatedItemWidth: Int = 0
@@ -64,30 +66,39 @@ class RecentProjectAdapter(
             tvName.text = project.name
             tvTime.text = getRelativeTime(project.updatedAt)
 
-            // Badge GIF / STICKER tương đồng với Explore
+            // Badge GIF / STICKER
             tvBadge?.let { badge ->
                 when (project.type) {
                     ProjectType.GIF, ProjectType.ANIMATED_STICKER -> {
                         badge.text = "GIF"
                         badge.setBackgroundResource(R.drawable.bg_badge_gif)
-                        badge.setTextColor(androidx.core.content.ContextCompat.getColor(itemView.context, android.R.color.white))
+                        badge.setTextColor(ContextCompat.getColor(itemView.context, android.R.color.white))
                         badge.visibility = View.VISIBLE
                     }
                     ProjectType.STICKER -> {
                         badge.text = "STICKER"
                         badge.setBackgroundResource(R.drawable.bg_badge_sticker)
-                        badge.setTextColor(androidx.core.content.ContextCompat.getColor(itemView.context, android.R.color.white))
+                        badge.setTextColor(ContextCompat.getColor(itemView.context, android.R.color.white))
                         badge.visibility = View.VISIBLE
                     }
                 }
             }
 
-            // Sử dụng placeholder drawable dựa trên thumbnailPath
-            val drawableRes = getPlaceholderDrawable(project.thumbnailPath)
-            ivThumbnail.setImageResource(drawableRes)
+            // Kiểm tra xem thumbnailPath có phải đường dẫn file trên bộ nhớ không
+            val file = File(project.thumbnailPath)
+            if (file.exists() && file.isFile) {
+                val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+                if (bitmap != null) {
+                    ivThumbnail.setImageBitmap(bitmap)
+                } else {
+                    ivThumbnail.setImageResource(getPlaceholderDrawable(project.thumbnailPath))
+                }
+            } else {
+                ivThumbnail.setImageResource(getPlaceholderDrawable(project.thumbnailPath))
+            }
 
             ivMore.setOnClickListener { onMoreClick(project) }
-            itemView.setOnClickListener { onItemClick(project) }
+            itemView.setOnClickListener { onItemClick(project.id) }
         }
 
         private fun getRelativeTime(timestamp: Long): String {

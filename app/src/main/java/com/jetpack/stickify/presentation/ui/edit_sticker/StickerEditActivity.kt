@@ -1,24 +1,21 @@
 package com.jetpack.stickify.presentation.ui.edit_sticker
 
-import com.jetpack.stickify.R
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.view.LayoutInflater
 import android.view.View
-import android.widget.Button
-import android.widget.FrameLayout
-import android.widget.ImageButton
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.ProgressBar
-import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.databinding.DataBindingUtil
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import com.jetpack.stickify.data.processor.StickerStyleProcessor
+import androidx.lifecycle.repeatOnLifecycle
+import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.ActivityStickerEditBinding
+import com.jetpack.stickify.presentation.ui.edit_sticker.border.BorderToolFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.custom_view.EditorPanelView
+import com.jetpack.stickify.presentation.ui.edit_sticker.decoration.DecorationFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.suggestion.SuggestionFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextToolFragment
 import dagger.hilt.android.AndroidEntryPoint
@@ -43,14 +40,15 @@ import android.graphics.BitmapFactory
 class StickerEditActivity : AppCompatActivity() {
 
     companion object {
+        const val EXTRA_PROJECT_ID = "extra_project_id"
         const val EXTRA_CROPPED_IMAGE_URI = "extra_cropped_image_uri"
         const val EXTRA_RESULT_URI = "extra_result_uri"
     }
 
     private lateinit var binding: ActivityStickerEditBinding
 
-    // Inject Shared ViewModel
     private val sharedViewModel: StickerSharedViewModel by viewModels()
+    private val editViewModel: StickerEditViewModel by viewModels()
 
     // Lưu trữ tham chiếu đến các Fragment để thực hiện logic Hide/Show
     private var suggestionFragment: SuggestionFragment? = null
@@ -59,60 +57,115 @@ class StickerEditActivity : AppCompatActivity() {
     private var decorToolFragment: DecorToolFragment? = null
     private var effectToolFragment: EffectToolFragment? = null
 
+    private var currentProjectId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = DataBindingUtil.setContentView(this,R.layout.activity_sticker_edit)
+        binding = DataBindingUtil.setContentView(this, R.layout.activity_sticker_edit)
 
         setupClickListeners()
         setupObservers()
         setupEditorTabMenu()
 
-        // Bắt đầu quy trình xử lý ảnh từ Intent
-        val uri: Uri? = intent.getParcelableExtra(EXTRA_CROPPED_IMAGE_URI)
-        if (uri == null) {
-            Toast.makeText(this, "Không nhận được ảnh đầu vào", Toast.LENGTH_LONG).show()
-            finish()
+        // 1. Kiểm tra nếu có projectId chuyển sang từ RecentProjectAdapter (Room DB Clean Architecture flow)
+        val projectId = intent.getStringExtra(EXTRA_PROJECT_ID)
+        if (!projectId.isNullOrBlank()) {
+            currentProjectId = projectId
+            editViewModel.loadProject(projectId)
             return
         }
 
-        // Đẩy Uri String xuống ViewModel (ViewModel sẽ gọi UseCase -> Repository xử lý)
-        sharedViewModel.loadAndPrepareStyles(uri.toString())
+        // 2. Kiểm tra nếu mở từ CutoutActivity qua Uri (Legacy Flow)
+        val uri: Uri? = intent.getParcelableExtra(EXTRA_CROPPED_IMAGE_URI)
+        if (uri != null) {
+            sharedViewModel.loadAndPrepareStyles(uri.toString())
+        } else {
+            Toast.makeText(this, "Không nhận được dữ liệu project hoặc ảnh đầu vào", Toast.LENGTH_LONG).show()
+            finish()
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        val projectId = currentProjectId
+        if (!projectId.isNullOrEmpty()) {
+            val canvasView = binding.zoomableView
+            if (canvasView.width > 0 && canvasView.height > 0) {
+                runCatching {
+                    val bitmap = canvasView.captureToBitmap()
+                    editViewModel.captureAndSaveThumbnail(projectId, bitmap)
+                }
+            }
+        }
     }
 
     private fun setupObservers() {
-        // 1. Quản lý trạng thái Loading chung
+        // Observers cho SharedViewModel (Legacy Flow)
         sharedViewModel.isLoading.observe(this) { isLoading ->
-            binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
-        }
-
-        // 2. Lắng nghe thay đổi Style -> Đổi ảnh Preview
-        sharedViewModel.currentStyle.observe(this) { style ->
-            val bitmap = sharedViewModel.styleBitmaps[style]
-            if (bitmap != null) {
-                // crossfade animation giữ nguyên zoom/pan
-                binding.zoomableView.setBitmap(bitmap, animate = true)
+            if (currentProjectId == null) {
+                binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
             }
         }
 
-        // 3. Cập nhật UI của nút Undo/Redo
-        sharedViewModel.historyState.observe(this) { (canUndo, canRedo) ->
-            binding.btnUndo.isEnabled = canUndo
-            binding.btnUndo.alpha = if (canUndo) 1f else 0.35f
-
-            binding.btnRedo.isEnabled = canRedo
-            binding.btnRedo.alpha = if (canRedo) 1f else 0.35f
+        sharedViewModel.currentStyle.observe(this) { style ->
+            if (currentProjectId == null) {
+                val bitmap = sharedViewModel.styleBitmaps[style]
+                if (bitmap != null) {
+                    binding.zoomableView.setBitmap(bitmap, animate = true)
+                }
+            }
         }
 
-        // 4. Lắng nghe kết quả khi bấm "Tạo" (Save thành công)
+        sharedViewModel.historyState.observe(this) { (canUndo, canRedo) ->
+            if (currentProjectId == null) {
+                updateUndoRedoButtons(canUndo, canRedo)
+            }
+        }
+
         sharedViewModel.saveSuccessEvent.observe(this) { savedUriString ->
-            if (savedUriString != null) {
+            if (currentProjectId == null && savedUriString != null) {
                 val resultUri = Uri.parse(savedUriString)
-                setResult(RESULT_OK, android.content.Intent().putExtra(EXTRA_RESULT_URI, resultUri))
+                setResult(RESULT_OK, Intent().putExtra(EXTRA_RESULT_URI, resultUri))
                 Toast.makeText(this, "Đã tạo sticker thành công!", Toast.LENGTH_SHORT).show()
                 finish()
             }
         }
+
+        // Observers cho StickerEditViewModel (Clean Architecture Flow từ Room Database)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                editViewModel.uiState.collect { state ->
+                    if (currentProjectId != null) {
+                        binding.progressBar.visibility = if (state.isLoading) View.VISIBLE else View.GONE
+                        updateUndoRedoButtons(state.canUndo, state.canRedo)
+
+                        // Truyền ProjectContent và AssetLoader vào ZoomableStickerView để render đa layer
+                        binding.zoomableView.setProjectContent(
+                            content = state.editorSession.content,
+                            loader = editViewModel.assetLoader
+                        )
+
+                        if (state.isSaveSuccess) {
+                            Toast.makeText(this@StickerEditActivity, "Đã lưu project thành công!", Toast.LENGTH_SHORT).show()
+                            setResult(RESULT_OK)
+                            finish()
+                        }
+
+                        if (!state.error.isNullOrBlank()) {
+                            Toast.makeText(this@StickerEditActivity, state.error, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun updateUndoRedoButtons(canUndo: Boolean, canRedo: Boolean) {
+        binding.btnUndo.isEnabled = canUndo
+        binding.btnUndo.alpha = if (canUndo) 1f else 0.35f
+
+        binding.btnRedo.isEnabled = canRedo
+        binding.btnRedo.alpha = if (canRedo) 1f else 0.35f
 
         // 5. Thêm decor khi người dùng chọn trong DecorToolFragment
         sharedViewModel.addedDecorEvent.observe(this) { decor ->
@@ -133,9 +186,13 @@ class StickerEditActivity : AppCompatActivity() {
     private fun setupClickListeners() {
         binding.btnBack.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
 
-        // Gọi thẳng vào ViewModel để lùi/tiến Lịch sử
-        binding.btnUndo.setOnClickListener { sharedViewModel.moveHistory(-1) }
-        binding.btnRedo.setOnClickListener { sharedViewModel.moveHistory(1) }
+        binding.btnUndo.setOnClickListener {
+            if (currentProjectId != null) {
+                editViewModel.undo()
+            } else {
+                sharedViewModel.moveHistory(-1)
+            }
+        }
 
         // Gọi ViewModel thực hiện lưu ảnh (ghép decor nếu có, xuất GIF nếu có animation)
         binding.btnCreate.setOnClickListener {
@@ -147,15 +204,28 @@ class StickerEditActivity : AppCompatActivity() {
             }
             sharedViewModel.saveCurrentSticker(finalBitmap)
         }
+        binding.btnRedo.setOnClickListener {
+            if (currentProjectId != null) {
+                editViewModel.redo()
+            } else {
+                sharedViewModel.moveHistory(1)
+            }
+        }
+
+        binding.btnCreate.setOnClickListener {
+            if (currentProjectId != null) {
+                editViewModel.saveProject()
+            } else {
+                sharedViewModel.saveCurrentSticker()
+            }
+        }
 
         binding.btnSendPrompt.setOnClickListener {
             Toast.makeText(this, "Tính năng tạo sticker AI đang được phát triển", Toast.LENGTH_SHORT).show()
         }
     }
 
-
     private fun setupEditorTabMenu() {
-
         binding.editorPanel.setOnTabSelectedListener(
             object : EditorPanelView.OnTabSelectedListener {
                 override fun onTabSelected(position: Int, tabName: String) {
@@ -163,21 +233,13 @@ class StickerEditActivity : AppCompatActivity() {
                 }
             }
         )
-        // Mặc định gọi Tab đầu tiên (position 0 - Đề xuất)
-        switchFragment("Đề xuất")
+        switchFragment(0)
     }
 
-    /**
-     * Kỹ thuật HIDE/SHOW Fragments:
-     * Thay vì `.replace()` sẽ tiêu hủy Fragment, ta dùng `.add()` lần đầu và `.hide()`/`.show()`
-     * những lần sau. Nhờ vậy, khi user gõ Text, chọn Sticker... trạng thái giao diện bên dưới
-     * không bao giờ bị mất hoặc giật (flicker).
-     */
-    private fun switchFragment(tabName: String) {
+    private fun switchFragment(position: Int) {
         val fragmentManager = supportFragmentManager
         val transaction = fragmentManager.beginTransaction()
 
-        // 1. Hide tất cả các fragment hiện có
         suggestionFragment?.let { transaction.hide(it) }
         textToolFragment?.let { transaction.hide(it) }
         borderToolFragment?.let { transaction.hide(it) }

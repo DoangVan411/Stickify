@@ -10,11 +10,16 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Shader
+import android.graphics.*
+import android.text.TextPaint
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.animation.LinearInterpolator
+import com.jetpack.stickify.data.source.local.AssetLoader
+import com.jetpack.stickify.domain.model.*
+import kotlinx.coroutines.*
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import com.jetpack.stickify.R
@@ -24,8 +29,8 @@ class ZoomableStickerView @JvmOverloads constructor(
 ) : View(context, attrs) {
 
     companion object {
-        private const val MIN_SCALE = 0.5f
-        private const val MAX_SCALE = 10f // Nới lỏng max scale để dễ xem viền
+        private const val MIN_SCALE = 0.1f
+        private const val MAX_SCALE = 10f
         private const val CROSSFADE_DURATION_MS = 260L
         private const val CHECKER_TILE_DP = 12f
     }
@@ -35,7 +40,13 @@ class ZoomableStickerView @JvmOverloads constructor(
     private var crossfadeProgress = 1f
     private var crossfadeAnimator: ValueAnimator? = null
 
-    // Ma trận hiển thị ảnh hiện tại
+    // Multi-layer rendering support
+    private var projectContent: ProjectContent? = null
+    private var assetLoader: AssetLoader? = null
+    private val layerBitmaps = mutableMapOf<String, Bitmap>()
+    private val viewScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    // Ma trận hiển thị chung
     private val displayMatrix = Matrix()
 
     // Ma trận hiển thị ảnh trước đó (dành riêng cho quá trình crossfade)
@@ -45,6 +56,7 @@ class ZoomableStickerView @JvmOverloads constructor(
 
     private val bitmapPaintCurrent = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val bitmapPaintPrevious = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
 
     private val checkerPaint: Paint by lazy { buildCheckerPaint() }
 
@@ -156,6 +168,7 @@ class ZoomableStickerView @JvmOverloads constructor(
     }
 
     fun setBitmap(bitmap: Bitmap, animate: Boolean = true) {
+        projectContent = null
         val previous = currentBitmap
         currentBitmap = bitmap
 
@@ -270,6 +283,7 @@ class ZoomableStickerView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         crossfadeAnimator?.cancel()
+        viewScope.cancel()
         animationAnimator?.cancel()
     }
 
@@ -278,8 +292,20 @@ class ZoomableStickerView @JvmOverloads constructor(
         // 1. Vẽ nền caro
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), checkerPaint)
 
-        val curr = currentBitmap ?: return
-        val prev = previousBitmap
+        canvas.save()
+        canvas.concat(displayMatrix)
+
+        // 2. Nếu có projectContent (Multi-layer mode từ Room DB)
+        val content = projectContent
+        if (content != null) {
+            for (layer in content.layers) {
+                if (!layer.visible) continue
+                drawLayer(canvas, layer)
+            }
+        } else {
+            // 3. Single bitmap preview mode (Legacy Cutout / SharedViewModel)
+            val curr = currentBitmap
+            val prev = previousBitmap
 
         val hasAnim = currentAnimationType.isAnimated
         if (hasAnim) {

@@ -10,6 +10,6 @@ data class StickerProject(
     val exportedPath: String? = null,
     val createdAt: Long,
     val updatedAt: Long,
-    val content: ProjectContent = ProjectContent(),
+    val content: ProjectContent,
     val history: EditHistory = EditHistory()
 )

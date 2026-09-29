@@ -11,6 +11,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.*
+import android.graphics.drawable.Drawable
 import android.text.TextPaint
 import android.util.AttributeSet
 import android.view.MotionEvent
@@ -84,35 +85,33 @@ class ZoomableStickerView @JvmOverloads constructor(
 
     private val decorPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val decorBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#2196F3")
+        color = Color.parseColor("#7A7A7A")
         style = Paint.Style.STROKE
-        strokeWidth = 2f * resources.displayMetrics.density
-        pathEffect = android.graphics.DashPathEffect(floatArrayOf(12f, 8f), 0f)
+        strokeWidth = 1.5f * resources.displayMetrics.density
     }
-    private val deleteBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#FF5252")
+    private val actionPillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
         style = Paint.Style.FILL
+    }
+    private val actionPillDividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#E8E8E8")
+        style = Paint.Style.STROKE
+        strokeWidth = 1f * resources.displayMetrics.density
     }
 
     // 4 corner handle paints
     private val handleFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE
+        color = Color.parseColor("#7A7A7A")
         style = Paint.Style.FILL
-        setShadowLayer(4f * resources.displayMetrics.density, 0f, 1f, Color.argb(60, 0, 0, 0))
     }
-    private val handleStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#2196F3")
-        style = Paint.Style.STROKE
-        strokeWidth = 2f * resources.displayMetrics.density
-    }
-    private val handleRadius = 7f * resources.displayMetrics.density
+    private val handleRadius = 6f * resources.displayMetrics.density
     private val handleTouchRadius = 28f * resources.displayMetrics.density
 
-    // Trash icon bitmap (lazy loaded from vector drawable)
+    private val duplicateBitmap: Bitmap by lazy {
+        drawableToBitmap(ContextCompat.getDrawable(context, R.drawable.ic_duplicate))
+    }
     private val trashBitmap: Bitmap by lazy {
-        val drawable = ContextCompat.getDrawable(context, R.drawable.ic_trash)!!
-        val size = (16f * resources.displayMetrics.density).toInt()
-        drawable.toBitmap(size, size, Bitmap.Config.ARGB_8888)
+        drawableToBitmap(ContextCompat.getDrawable(context, R.drawable.ic_trash))
     }
 
     // Single-finger handle drag state
@@ -121,6 +120,16 @@ class ZoomableStickerView @JvmOverloads constructor(
     private var handleDragStartDistance = 0f
     private var handleDragStartRotation = 0f
     private var handleDragStartScale = 0f
+
+    private enum class DecorAction {
+        DUPLICATE, DELETE
+    }
+
+    private data class ActionPillLayout(
+        val pillRect: RectF,
+        val duplicateRect: RectF,
+        val deleteRect: RectF
+    )
 
     fun hasDecors(): Boolean = decorItems.isNotEmpty()
 
@@ -381,7 +390,6 @@ class ZoomableStickerView @JvmOverloads constructor(
             // 4. Vẽ các vật phẩm Decor
             val currentScale = currentMatrixScale()
             val density = resources.displayMetrics.density
-            val deleteRadius = 14f * density
 
             for (decor in decorItems) {
                 val pts = floatArrayOf(decor.x, decor.y)
@@ -397,38 +405,11 @@ class ZoomableStickerView @JvmOverloads constructor(
 
                 val rect = RectF(-screenW / 2f, -screenH / 2f, screenW / 2f, screenH / 2f)
                 canvas.drawBitmap(decor.bitmap, null, rect, decorPaint)
+                canvas.restore()
 
                 if (decor == selectedDecor) {
-                    // Khung viền nét đứt khi được chọn
-                    canvas.drawRoundRect(rect, 8f * density, 8f * density, decorBorderPaint)
-
-                    // 4 chấm tròn ở 4 góc (handles xoay/phóng)
-                    val corners = arrayOf(
-                        floatArrayOf(rect.left, rect.top),      // Trên-trái
-                        floatArrayOf(rect.right, rect.top),     // Trên-phải
-                        floatArrayOf(rect.left, rect.bottom),   // Dưới-trái
-                        floatArrayOf(rect.right, rect.bottom)   // Dưới-phải
-                    )
-                    for (corner in corners) {
-                        canvas.drawCircle(corner[0], corner[1], handleRadius, handleFillPaint)
-                        canvas.drawCircle(corner[0], corner[1], handleRadius, handleStrokePaint)
-                    }
-
-                    // Nút xoá (thùng rác) — đặt phía trên góc trên-phải
-                    val delCx = rect.right + deleteRadius * 0.5f
-                    val delCy = rect.top - deleteRadius * 0.9f
-                    canvas.drawCircle(delCx, delCy, deleteRadius, deleteBgPaint)
-                    val trashIconSize = deleteRadius * 1.2f
-                    val trashRect = RectF(
-                        delCx - trashIconSize / 2f,
-                        delCy - trashIconSize / 2f,
-                        delCx + trashIconSize / 2f,
-                        delCy + trashIconSize / 2f
-                    )
-                    canvas.drawBitmap(trashBitmap, null, trashRect, decorPaint)
+                    drawSelectedDecorOverlay(canvas, decor, currentScale, density)
                 }
-
-                canvas.restore()
             }
 
             if (hasAnim) {
@@ -529,31 +510,132 @@ class ZoomableStickerView @JvmOverloads constructor(
         return null
     }
 
-    private fun isTouchOnDelete(decor: DecorItemState, touchX: Float, touchY: Float): Boolean {
-        val mScale = currentMatrixScale()
-        val density = resources.displayMetrics.density
-        val deleteRadius = 14f * density
+    private fun drawSelectedDecorOverlay(
+        canvas: Canvas,
+        decor: DecorItemState,
+        matrixScale: Float,
+        density: Float
+    ) {
+        val corners = getDecorCornersInScreen(decor, matrixScale)
+        if (corners.size != 4) return
+
+        val borderPath = Path().apply {
+            moveTo(corners[0][0], corners[0][1])
+            lineTo(corners[1][0], corners[1][1])
+            lineTo(corners[3][0], corners[3][1])
+            lineTo(corners[2][0], corners[2][1])
+            close()
+        }
+        canvas.drawPath(borderPath, decorBorderPaint)
+
+        for (corner in corners) {
+            canvas.drawCircle(corner[0], corner[1], handleRadius, handleFillPaint)
+        }
+
+        val actionLayout = buildActionPillLayout(corners, density)
+        val radius = actionLayout.pillRect.height() / 2f
+        canvas.drawRoundRect(actionLayout.pillRect, radius, radius, actionPillPaint)
+        canvas.drawLine(
+            actionLayout.duplicateRect.right,
+            actionLayout.pillRect.top + 8f * density,
+            actionLayout.duplicateRect.right,
+            actionLayout.pillRect.bottom - 8f * density,
+            actionPillDividerPaint
+        )
+        canvas.drawBitmap(duplicateBitmap, null, actionLayout.duplicateRect, decorPaint)
+        canvas.drawBitmap(trashBitmap, null, actionLayout.deleteRect, decorPaint)
+    }
+
+    private fun getDecorCornersInScreen(decor: DecorItemState, matrixScale: Float): Array<FloatArray> {
         val pts = floatArrayOf(decor.x, decor.y)
         displayMatrix.mapPoints(pts)
         val screenX = pts[0]
         val screenY = pts[1]
-        val screenW = decor.width * decor.scale * mScale
-        val screenH = decor.height * decor.scale * mScale
+        val screenW = decor.width * decor.scale * matrixScale
+        val screenH = decor.height * decor.scale * matrixScale
+        val halfW = screenW / 2f
+        val halfH = screenH / 2f
+        val localCorners = arrayOf(
+            floatArrayOf(-halfW, -halfH),
+            floatArrayOf(halfW, -halfH),
+            floatArrayOf(-halfW, halfH),
+            floatArrayOf(halfW, halfH)
+        )
 
-        // Vị trí nút xoá trong hệ toạ độ quay: phía trên góc trên-phải
-        val delLocalX = screenW / 2f + deleteRadius * 0.5f
-        val delLocalY = -screenH / 2f - deleteRadius * 0.9f
+        val rad = Math.toRadians(decor.rotation.toDouble())
+        val cosR = Math.cos(rad).toFloat()
+        val sinR = Math.sin(rad).toFloat()
 
-        val localX = touchX - screenX
-        val localY = touchY - screenY
-        val rad = Math.toRadians(-decor.rotation.toDouble())
-        val rotX = (localX * Math.cos(rad) - localY * Math.sin(rad)).toFloat()
-        val rotY = (localX * Math.sin(rad) + localY * Math.cos(rad)).toFloat()
+        return Array(localCorners.size) { i ->
+            val lx = localCorners[i][0]
+            val ly = localCorners[i][1]
+            floatArrayOf(
+                screenX + lx * cosR - ly * sinR,
+                screenY + lx * sinR + ly * cosR
+            )
+        }
+    }
 
-        val radius = 28f * density
-        val dx = rotX - delLocalX
-        val dy = rotY - delLocalY
-        return (dx * dx + dy * dy) <= radius * radius
+    private fun buildActionPillLayout(corners: Array<FloatArray>, density: Float): ActionPillLayout {
+        val topRight = corners[1]
+        val buttonSize = 28f * density
+        val horizontalPadding = 12f * density
+        val verticalPadding = 8f * density
+        val pillWidth = horizontalPadding * 2f + buttonSize * 2f
+        val pillHeight = verticalPadding * 2f + buttonSize
+        val spacingTop = 14f * density
+
+        val pillLeft = topRight[0] - pillWidth * 0.85f
+        val pillTop = topRight[1] - spacingTop - pillHeight
+        val pillRect = RectF(pillLeft, pillTop, pillLeft + pillWidth, pillTop + pillHeight)
+
+        val duplicateRect = RectF(
+            pillRect.left + horizontalPadding,
+            pillRect.top + verticalPadding,
+            pillRect.left + horizontalPadding + buttonSize,
+            pillRect.top + verticalPadding + buttonSize
+        )
+        val deleteRect = RectF(
+            duplicateRect.right,
+            duplicateRect.top,
+            duplicateRect.right + buttonSize,
+            duplicateRect.bottom
+        )
+
+        return ActionPillLayout(
+            pillRect = pillRect,
+            duplicateRect = duplicateRect,
+            deleteRect = deleteRect
+        )
+    }
+
+    private fun getDecorActionAt(decor: DecorItemState, touchX: Float, touchY: Float): DecorAction? {
+        val corners = getDecorCornersInScreen(decor, currentMatrixScale())
+        val layout = buildActionPillLayout(corners, resources.displayMetrics.density)
+        return when {
+            layout.duplicateRect.contains(touchX, touchY) -> DecorAction.DUPLICATE
+            layout.deleteRect.contains(touchX, touchY) -> DecorAction.DELETE
+            else -> null
+        }
+    }
+
+    private fun duplicateDecor(decor: DecorItemState) {
+        val currentScale = currentMatrixScale().coerceAtLeast(0.01f)
+        val offset = 24f * resources.displayMetrics.density / currentScale
+        val duplicated = decor.copy(
+            id = java.util.UUID.randomUUID().toString(),
+            x = decor.x + offset,
+            y = decor.y + offset
+        )
+        decorItems.add(duplicated)
+        selectedDecor = duplicated
+        invalidate()
+    }
+
+    private fun drawableToBitmap(drawable: Drawable?): Bitmap {
+        val safeDrawable = drawable ?: error("Drawable is required for action icon")
+        val size = (20f * resources.displayMetrics.density).toInt()
+        return safeDrawable.toBitmap(size, size, Bitmap.Config.ARGB_8888)
     }
 
     /**
@@ -634,11 +716,17 @@ class ZoomableStickerView @JvmOverloads constructor(
             MotionEvent.ACTION_DOWN -> {
                 val sel = selectedDecor
 
-                // Ưu tiên 1: Nhấn vào nút thùng rác
-                if (sel != null && isTouchOnDelete(sel, event.x, event.y)) {
-                    decorItems.remove(sel)
-                    selectedDecor = null
-                    invalidate()
+                // Ưu tiên 1: Nhấn vào nhóm action (nhân bản/xoá)
+                val action = sel?.let { getDecorActionAt(it, event.x, event.y) }
+                if (sel != null && action != null) {
+                    when (action) {
+                        DecorAction.DUPLICATE -> duplicateDecor(sel)
+                        DecorAction.DELETE -> {
+                            decorItems.remove(sel)
+                            selectedDecor = null
+                            invalidate()
+                        }
+                    }
                     return true
                 }
 

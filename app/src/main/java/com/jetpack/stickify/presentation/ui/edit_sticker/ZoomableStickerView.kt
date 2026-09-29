@@ -84,7 +84,9 @@ class ZoomableStickerView @JvmOverloads constructor(
     private data class DrawDecorBrush(
         val id: String,
         val bitmap: Bitmap,
-        val widthRatio: Float = 0.14f
+        val widthRatio: Float = 0.18f,
+        val minScaleRatio: Float = 0.85f,
+        val maxScaleRatio: Float = 1.25f
     )
 
     private var drawDecorBrush: DrawDecorBrush? = null
@@ -752,12 +754,14 @@ class ZoomableStickerView @JvmOverloads constructor(
     private fun addDrawDecorAt(screenX: Float, screenY: Float): Boolean {
         val brush = drawDecorBrush ?: return false
         val point = screenToCanvasPoint(screenX, screenY) ?: return false
+        val randomScale = brush.minScaleRatio +
+            (brush.maxScaleRatio - brush.minScaleRatio) * kotlin.random.Random.nextFloat()
         val decor = createDecorState(
             id = java.util.UUID.randomUUID().toString(),
             bitmap = brush.bitmap,
             x = point.x,
             y = point.y,
-            widthRatio = brush.widthRatio,
+            widthRatio = brush.widthRatio * randomScale,
             isEditable = false
         )
         decorItems.add(decor)

@@ -1,9 +1,11 @@
 package com.jetpack.stickify.data.source.local
 
 import com.jetpack.stickify.domain.model.ExploreCategory
+import com.jetpack.stickify.domain.model.FavoriteSticker
 import com.jetpack.stickify.domain.model.ProjectEntity
 import com.jetpack.stickify.domain.model.ProjectOrigin
 import com.jetpack.stickify.domain.model.ProjectType
+import com.jetpack.stickify.domain.model.StickerPack
 import com.jetpack.stickify.domain.model.StickerTemplate
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -130,5 +132,39 @@ class FakeProjectDataSource @Inject constructor() {
             ExploreCategory.CUTE -> all.filter { it.tags.contains("cute") }
             ExploreCategory.MEME -> all.filter { it.tags.contains("meme") }
         }
+    }
+
+    fun getFavoriteStickers(): List<FavoriteSticker> {
+        return listOf(
+            FavoriteSticker(id = "fav_1", name = "Happy run", thumbnailPath = "recent_1", type = ProjectType.STICKER),
+            FavoriteSticker(id = "fav_2", name = "Happy girl", thumbnailPath = "recent_2", type = ProjectType.STICKER),
+            FavoriteSticker(id = "fav_3", name = "Cool dog", thumbnailPath = "recent_3", type = ProjectType.STICKER),
+            FavoriteSticker(id = "fav_4", name = "Cute kitten", thumbnailPath = "recent_1", type = ProjectType.STICKER),
+            FavoriteSticker(id = "fav_5", name = "Sweet girl", thumbnailPath = "recent_2", type = ProjectType.STICKER),
+            FavoriteSticker(id = "fav_6", name = "Puppy smile", thumbnailPath = "recent_3", type = ProjectType.STICKER)
+        )
+    }
+
+    fun getStickerPacks(): List<StickerPack> {
+        return listOf(
+            StickerPack(
+                id = "pack_1",
+                name = "Vũ trụ dễ thương",
+                itemCount = 24,
+                type = ProjectType.STICKER
+            ),
+            StickerPack(
+                id = "pack_2",
+                name = "Biểu cảm hài hước",
+                itemCount = 18,
+                type = ProjectType.STICKER
+            ),
+            StickerPack(
+                id = "pack_3",
+                name = "Động vật siêu quậy",
+                itemCount = 12,
+                type = ProjectType.STICKER
+            )
+        )
     }
 }

@@ -33,11 +33,11 @@ class EditorPanelView @JvmOverloads constructor(
     // Dữ liệu mô phỏng cho Tab (để hiển thị icon và chữ)
     // Khai báo danh sách các tab kèm icon (đảm bảo bạn đã thêm các vector asset này vào thư mục res/drawable)
     private val tabs = listOf(
-        TabItem("suggest","Đề xuất", R.drawable.ic_spark),  // Icon ngôi sao lấp lánh
-        TabItem("text","Chữ", R.drawable.ic_text),         // Icon chữ T
-        TabItem("effect","Hiệu ứng", R.drawable.ic_effect),       // Icon cây đũa phép
-        TabItem("decore","Trang trí", R.drawable.ic_decore),     // Icon bông hoa
-        TabItem("border","Viền", R.drawable.ic_border)         // Icon khung viền nét đứt
+        TabItem("suggest", "Đề xuất", R.drawable.ic_spark),  // Icon ngôi sao lấp lánh
+        TabItem("text", "Chữ", R.drawable.ic_text),         // Icon chữ T
+        TabItem("effect", "Hiệu ứng", R.drawable.ic_effect),       // Icon cây đũa phép
+        TabItem("decore", "Trang trí", R.drawable.ic_decore),     // Icon bông hoa
+        TabItem("border", "Viền", R.drawable.ic_border)         // Icon khung viền nét đứt
     )
     private var currentTabIndex = 0
 

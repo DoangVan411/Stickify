@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="28"
+    android:viewportHeight="28">
+    <!-- Galaxy Outer Swirl -->
+    <path
+        android:fillColor="#7986CB"
+        android:pathData="M14,4c5.52,0 10,4.48 10,10s-4.48,10 -10,10s-10,-4.48 -10,-10s4.48,-10 10,-10z" />
+    <!-- Galaxy Mid Spiral -->
+    <path
+        android:fillColor="#5C6BC0"
+        android:pathData="M14,6c4.42,0 8,3.58 8,8s-3.58,8 -8,8s-8,-3.58 -8,-8s3.58,-8 8,-8z" />
+    <!-- Galaxy Inner Core -->
+    <path
+        android:fillColor="#E040FB"
+        android:pathData="M14,9c2.76,0 5,2.24 5,5s-2.24,5 -5,5s-5,-2.24 -5,-5s2.24,-5 5,-5z" />
+    <!-- Center white glow -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M14,12a2,2 0,1 1,0 4a2,2 0,1 1,0 -4z" />
+</vector>

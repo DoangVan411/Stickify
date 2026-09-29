@@ -15,20 +15,27 @@ import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.ActivityStickerEditBinding
 import com.jetpack.stickify.presentation.ui.edit_sticker.border.BorderToolFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.custom_view.EditorPanelView
+import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorToolFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.decoration.DecorationFragment
+import com.jetpack.stickify.presentation.ui.edit_sticker.effect.EffectToolFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.suggestion.SuggestionFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextToolFragment
+import com.jetpack.stickify.domain.model.StickerStyle
+import android.graphics.BitmapFactory
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
 /**
  * Màn hình "Chỉnh sửa" sticker:
- * - Nhận projectId từ Intent extra EXTRA_PROJECT_ID, nạp dữ liệu từ Room DB và phục hồi EditorSession (content & history).
- * - Observe state canUndo/canRedo để cập nhật nút Undo/Redo.
- * - Observe ProjectContent để truyền vào ZoomableStickerView vẽ các layer lên Canvas.
- * - Tự động chụp và cập nhật Thumbnail khi thoát/ẩn màn hình (onStop).
+ * - Nhận ảnh đã cắt qua EXTRA_CROPPED_IMAGE_URI (từ CutoutActivity).
+ * - Preview có thể pinch-zoom/pan tự do (ZoomableStickerView).
+ * - 3 kiểu đề xuất "Giữ nguyên / Viền ngoài / Hoạt hình" được TÍNH TRƯỚC 1 lần khi vào màn
+ *   hình, nên khi bấm chuyển kiểu, ảnh preview đổi ngay + có animation crossfade mượt mà,
+ *   không phải chờ tính toán lại.
+ * - Có lịch sử chọn kiểu để Undo/Redo.
  */
-@AndroidEntryPoint
+
+@AndroidEntryPoint // Bắt buộc để Hilt có thể tiêm StickerSharedViewModel vào đây
 class StickerEditActivity : AppCompatActivity() {
 
     companion object {
@@ -42,10 +49,12 @@ class StickerEditActivity : AppCompatActivity() {
     private val sharedViewModel: StickerSharedViewModel by viewModels()
     private val editViewModel: StickerEditViewModel by viewModels()
 
+    // Lưu trữ tham chiếu đến các Fragment để thực hiện logic Hide/Show
     private var suggestionFragment: SuggestionFragment? = null
     private var textToolFragment: TextToolFragment? = null
     private var borderToolFragment: BorderToolFragment? = null
-    private var decorationFragment: DecorationFragment? = null
+    private var decorToolFragment: DecorToolFragment? = null
+    private var effectToolFragment: EffectToolFragment? = null
 
     private var currentProjectId: String? = null
 
@@ -156,6 +165,21 @@ class StickerEditActivity : AppCompatActivity() {
 
         binding.btnRedo.isEnabled = canRedo
         binding.btnRedo.alpha = if (canRedo) 1f else 0.35f
+
+        // 5. Thêm decor khi người dùng chọn trong DecorToolFragment
+        sharedViewModel.addedDecorEvent.observe(this) { decor ->
+            if (decor != null) {
+                val bitmap = decor.customBitmap ?: BitmapFactory.decodeResource(resources, decor.resId)
+                if (bitmap != null) {
+                    binding.zoomableView.addDecorBitmap(bitmap, decor.id)
+                }
+            }
+        }
+
+        // 6. Lắng nghe hiệu ứng animation được chọn để preview động
+        sharedViewModel.currentAnimation.observe(this) { animationType ->
+            binding.zoomableView.setAnimationType(animationType)
+        }
     }
 
     private fun setupClickListeners() {
@@ -177,11 +201,18 @@ class StickerEditActivity : AppCompatActivity() {
             }
         }
 
+        // Gọi ViewModel thực hiện lưu ảnh (ghép decor nếu có, xuất GIF nếu có animation) hoặc lưu project
         binding.btnCreate.setOnClickListener {
             if (currentProjectId != null) {
                 editViewModel.saveProject()
             } else {
-                sharedViewModel.saveCurrentSticker()
+                val baseBitmap = sharedViewModel.styleBitmaps[sharedViewModel.currentStyle.value ?: StickerStyle.ORIGINAL]
+                val finalBitmap = if (baseBitmap != null && binding.zoomableView.hasDecors()) {
+                    binding.zoomableView.renderCompositeBitmap(baseBitmap)
+                } else {
+                    baseBitmap
+                }
+                sharedViewModel.saveCurrentSticker(finalBitmap)
             }
         }
 
@@ -194,25 +225,26 @@ class StickerEditActivity : AppCompatActivity() {
         binding.editorPanel.setOnTabSelectedListener(
             object : EditorPanelView.OnTabSelectedListener {
                 override fun onTabSelected(position: Int, tabName: String) {
-                    switchFragment(position)
+                    switchFragment(tabName)
                 }
             }
         )
-        switchFragment(0)
+        switchFragment("Đề xuất")
     }
 
-    private fun switchFragment(position: Int) {
+    private fun switchFragment(tabName: String) {
         val fragmentManager = supportFragmentManager
         val transaction = fragmentManager.beginTransaction()
 
         suggestionFragment?.let { transaction.hide(it) }
         textToolFragment?.let { transaction.hide(it) }
         borderToolFragment?.let { transaction.hide(it) }
-        decorationFragment?.let { transaction.hide(it) }
+        decorToolFragment?.let { transaction.hide(it) }
+        effectToolFragment?.let { transaction.hide(it) }
 
-
-        when (position) {
-            0 -> {
+        // 2. Show Fragment tương ứng với Tab
+        when (tabName) {
+            "Đề xuất" -> {
                 if (suggestionFragment == null) {
                     suggestionFragment = SuggestionFragment()
                     transaction.add(R.id.featureContainer, suggestionFragment!!, "SUGGESTION")
@@ -220,7 +252,7 @@ class StickerEditActivity : AppCompatActivity() {
                     transaction.show(suggestionFragment!!)
                 }
             }
-            1 -> {
+            "Chữ" -> {
                 if (textToolFragment == null) {
                     textToolFragment = TextToolFragment()
                     transaction.add(R.id.featureContainer, textToolFragment!!, "TEXT_TOOL")
@@ -228,15 +260,23 @@ class StickerEditActivity : AppCompatActivity() {
                     transaction.show(textToolFragment!!)
                 }
             }
-            3->{
-                if (decorationFragment == null) {
-                    decorationFragment = DecorationFragment()
-                    transaction.add(R.id.featureContainer, decorationFragment!!, "DECORATION")
+            "Hiệu ứng" -> {
+                if (effectToolFragment == null) {
+                    effectToolFragment = EffectToolFragment()
+                    transaction.add(R.id.featureContainer, effectToolFragment!!, "EFFECT_TOOL")
                 } else {
-                    transaction.show(decorationFragment!!)
+                    transaction.show(effectToolFragment!!)
                 }
             }
-            4 -> {
+            "Trang trí" -> {
+                if (decorToolFragment == null) {
+                    decorToolFragment = DecorToolFragment()
+                    transaction.add(R.id.featureContainer, decorToolFragment!!, "DECOR_TOOL")
+                } else {
+                    transaction.show(decorToolFragment!!)
+                }
+            }
+            "Viền" -> {
                 if (borderToolFragment == null) {
                     borderToolFragment = BorderToolFragment()
                     transaction.add(R.id.featureContainer, borderToolFragment!!, "BORDER_TOOL")

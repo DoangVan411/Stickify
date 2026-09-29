@@ -1,9 +1,5 @@
 package com.jetpack.stickify.domain.model
 
-/**
- * Nội dung của một project (canvas, layers, border, playback).
- * Map từ class diagram ProjectContent.
- */
 data class ProjectContent(
     val canvas: CanvasSpec = CanvasSpec(),
     val layers: List<Layer> = emptyList(),
@@ -13,10 +9,9 @@ data class ProjectContent(
     fun apply(action: EditAction): ProjectContent {
         return when (action) {
             is AddLayerAction -> {
-                val newLayers = layers.toMutableList().apply {
-                    val targetIndex = action.index.coerceIn(0, size)
-                    add(targetIndex, action.layer)
-                }
+                val newLayers = layers.toMutableList()
+                val targetIndex = action.index.coerceIn(0, newLayers.size)
+                newLayers.add(targetIndex, action.layer)
                 copy(layers = newLayers)
             }
             is RemoveLayerAction -> {
@@ -24,16 +19,17 @@ data class ProjectContent(
                 copy(layers = newLayers)
             }
             is UpdateLayerAction -> {
-                val newLayers = layers.map { layer ->
-                    if (layer.id == action.before.id) action.after else layer
-                }
+                val newLayers = layers.map { if (it.id == action.before.id) action.after else it }
                 copy(layers = newLayers)
             }
             is ReorderLayerAction -> {
-                val layerToMove = layers.find { it.id == action.layerId } ?: return this
-                val newLayers = layers.filterNot { it.id == action.layerId }.toMutableList()
-                val targetIndex = action.to.coerceIn(0, newLayers.size)
-                newLayers.add(targetIndex, layerToMove)
+                val newLayers = layers.toMutableList()
+                val item = newLayers.firstOrNull { it.id == action.layerId }
+                if (item != null) {
+                    newLayers.remove(item)
+                    val targetIndex = action.to.coerceIn(0, newLayers.size)
+                    newLayers.add(targetIndex, item)
+                }
                 copy(layers = newLayers)
             }
             is ChangeBorderAction -> {

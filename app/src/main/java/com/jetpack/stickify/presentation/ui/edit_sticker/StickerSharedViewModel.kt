@@ -14,12 +14,16 @@ import com.jetpack.stickify.domain.usecase.ProcessStickerUseCase
 import com.jetpack.stickify.domain.usecase.SaveStickerUseCase
 import androidx.core.graphics.scale
 import com.jetpack.stickify.domain.usecase.ApplyBorderUseCase
+import com.jetpack.stickify.domain.usecase.ExportGifUseCase
+import com.jetpack.stickify.domain.model.StickerAnimationType
+import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorModel
 
 @HiltViewModel // Sử dụng Hilt để Inject
 class StickerSharedViewModel @Inject constructor(
     private val processStickerUseCase: ProcessStickerUseCase,
     private val saveStickerUseCase: SaveStickerUseCase,
-    private val applyBorderUseCase: ApplyBorderUseCase
+    private val applyBorderUseCase: ApplyBorderUseCase,
+    private val exportGifUseCase: ExportGifUseCase
 ) : ViewModel() {
 
     private val _isLoading = MutableLiveData<Boolean>()
@@ -53,6 +57,29 @@ class StickerSharedViewModel @Inject constructor(
     val currentBorderThickness = MutableLiveData<Int>(30)
     val currentBorderDistance = MutableLiveData<Int>(20)
     val currentBorderColor = MutableLiveData<Int>(Color.WHITE)
+
+    // Decor / Trang trí
+    private val _decorList = MutableLiveData<List<DecorModel>>(emptyList())
+    val decorList: LiveData<List<DecorModel>> get() = _decorList
+
+    private val _addedDecorEvent = MutableLiveData<DecorModel?>()
+    val addedDecorEvent: LiveData<DecorModel?> get() = _addedDecorEvent
+
+    fun addDecor(resId: Int) {
+        val newDecor = DecorModel(resId = resId)
+        val current = _decorList.value.orEmpty().toMutableList()
+        current.add(newDecor)
+        _decorList.value = current
+        _addedDecorEvent.value = newDecor
+    }
+
+    fun addCustomDecor(bitmap: Bitmap) {
+        val newDecor = DecorModel(customBitmap = bitmap)
+        val current = _decorList.value.orEmpty().toMutableList()
+        current.add(newDecor)
+        _decorList.value = current
+        _addedDecorEvent.value = newDecor
+    }
 
     fun loadAndPrepareStyles(uriString: String) {
         if (styleBitmaps.isNotEmpty()) return
@@ -91,14 +118,27 @@ class StickerSharedViewModel @Inject constructor(
         }
     }
 
-    fun saveCurrentSticker() {
-        val currentBitmap = styleBitmaps[_currentStyle.value ?: StickerStyle.ORIGINAL] ?: return
+    // Animation / Effect
+    private val _currentAnimation = MutableLiveData(com.jetpack.stickify.domain.model.StickerAnimationType.NONE)
+    val currentAnimation: LiveData<com.jetpack.stickify.domain.model.StickerAnimationType> get() = _currentAnimation
+
+    fun setAnimation(animationType: com.jetpack.stickify.domain.model.StickerAnimationType) {
+        _currentAnimation.value = animationType
+    }
+
+    fun saveCurrentSticker(overrideBitmap: Bitmap? = null) {
+        val currentBitmap = overrideBitmap ?: styleBitmaps[_currentStyle.value ?: StickerStyle.ORIGINAL] ?: return
 
         _isLoading.value = true
         viewModelScope.launch {
             try {
-                // Gọi Use Case lưu ảnh
-                val savedUri = saveStickerUseCase(currentBitmap)
+                // Gọi Use Case lưu ảnh (hoặc xuất GIF nếu chọn animation)
+                val anim = _currentAnimation.value
+                val savedUri = if (anim != null && anim.isAnimated) {
+                    exportGifUseCase(currentBitmap, anim)
+                } else {
+                    saveStickerUseCase(currentBitmap)
+                }
                 _saveSuccessEvent.value = savedUri
             } catch (e: Exception) {
                 // Handle Error

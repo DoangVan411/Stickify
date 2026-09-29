@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="28"
+    android:viewportHeight="28">
+    <!-- Moon Body -->
+    <path
+        android:fillColor="#FFD54F"
+        android:pathData="M21,14c0,5.52 -4.48,10 -10,10c-2.45,0 -4.7,-0.89 -6.46,-2.36c4.66,-0.65 8.26,-4.62 8.26,-9.44c0,-4.59 -3.27,-8.42 -7.63,-9.35C7.03,2.3 9.42,2 11.2,2C16.62,2 21,6.48 21,14z" />
+    <!-- Blush -->
+    <path
+        android:fillColor="#FFAB91"
+        android:pathData="M16.5,15m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0" />
+    <!-- Eye -->
+    <path
+        android:fillColor="#37474F"
+        android:pathData="M15,11.5a1,1 0,1 1,2 0a1,1 0,1 1,-2 0" />
+    <!-- Smile -->
+    <path
+        android:strokeColor="#37474F"
+        android:strokeWidth="1"
+        android:strokeLineCap="round"
+        android:pathData="M14.5,13.8c0.6,0.7 1.4,0.7 2,0" />
+</vector>

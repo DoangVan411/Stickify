@@ -7,12 +7,15 @@ import com.jetpack.stickify.data.source.local.DatabaseSeeder
 import com.jetpack.stickify.data.source.local.FakeProjectDataSource
 import com.jetpack.stickify.data.source.local.dao.ProjectDao
 import com.jetpack.stickify.domain.model.ExploreCategory
+import com.jetpack.stickify.domain.model.FavoriteSticker
 import com.jetpack.stickify.domain.model.ProjectEntity
+import com.jetpack.stickify.domain.model.StickerPack
 import com.jetpack.stickify.domain.model.StickerProject
 import com.jetpack.stickify.domain.model.StickerTemplate
 import com.jetpack.stickify.domain.repository.ProjectRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
@@ -45,6 +48,7 @@ class ProjectRepositoryImpl @Inject constructor(
             entity?.let { mapper.toDomain(it) }
         }
     }
+
 
     override suspend fun saveProject(project: StickerProject): Result<Unit> {
         return try {
@@ -102,6 +106,24 @@ class ProjectRepositoryImpl @Inject constructor(
     override suspend fun getExploreTemplates(category: ExploreCategory): Result<List<StickerTemplate>> {
         return try {
             Result.success(fakeDataSource.getExploreTemplatesByCategory(category))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getFavoriteStickers(): Result<List<FavoriteSticker>> {
+        return try {
+            delay(200)
+            Result.success(fakeDataSource.getFavoriteStickers())
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getStickerPacks(): Result<List<StickerPack>> {
+        return try {
+            delay(200)
+            Result.success(fakeDataSource.getStickerPacks())
         } catch (e: Exception) {
             Result.failure(e)
         }

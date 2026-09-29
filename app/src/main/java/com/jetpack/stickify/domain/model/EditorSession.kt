@@ -1,11 +1,7 @@
 package com.jetpack.stickify.domain.model
 
-/**
- * Quản lý phiên làm việc chỉnh sửa Sticker.
- * Map từ class diagram EditorSession.
- */
-data class EditorSession(
-    var content: ProjectContent,
+class EditorSession(
+    var content: ProjectContent = ProjectContent(),
     var history: EditHistory = EditHistory()
 ) {
     fun perform(action: EditAction) {
@@ -18,21 +14,20 @@ data class EditorSession(
 
     fun undo() {
         if (!history.canUndo) return
-        val lastAction = history.undo.last()
-        val inverseAction = lastAction.inverse()
-        content = content.apply(inverseAction)
+        val action = history.undo.last()
+        content = content.apply(action.inverse())
         history = history.copy(
             undo = history.undo.dropLast(1),
-            redo = history.redo + lastAction
+            redo = history.redo + action
         )
     }
 
     fun redo() {
         if (!history.canRedo) return
-        val actionToRedo = history.redo.last()
-        content = content.apply(actionToRedo)
+        val action = history.redo.last()
+        content = content.apply(action)
         history = history.copy(
-            undo = history.undo + actionToRedo,
+            undo = history.undo + action,
             redo = history.redo.dropLast(1)
         )
     }

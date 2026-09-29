@@ -2,7 +2,7 @@ package com.jetpack.stickify.domain.repository
 
 import android.graphics.Bitmap
 import com.jetpack.stickify.domain.model.ProcessedStickers
-
+import com.jetpack.stickify.domain.model.StickerAnimationType
 
 interface StickerRepository {
     // Nhận vào URI dưới dạng String để giảm phụ thuộc vào framework
@@ -17,4 +17,9 @@ interface StickerRepository {
         distance: Int,
         color: Int
     ): Bitmap
+
+    suspend fun saveAnimatedGif(
+        bitmap: Bitmap,
+        animationType: StickerAnimationType
+    ): String
 }

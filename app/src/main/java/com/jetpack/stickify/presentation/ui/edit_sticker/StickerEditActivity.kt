@@ -130,12 +130,12 @@ class StickerEditActivity : AppCompatActivity() {
         binding.editorPanel.setOnTabSelectedListener(
             object : EditorPanelView.OnTabSelectedListener {
                 override fun onTabSelected(position: Int, tabName: String) {
-                    switchFragment(position)
+                    switchFragment(tabName)
                 }
             }
         )
         // Mặc định gọi Tab đầu tiên (position 0 - Đề xuất)
-        switchFragment(0)
+        switchFragment("Đề xuất")
     }
 
     /**
@@ -144,43 +144,41 @@ class StickerEditActivity : AppCompatActivity() {
      * những lần sau. Nhờ vậy, khi user gõ Text, chọn Sticker... trạng thái giao diện bên dưới
      * không bao giờ bị mất hoặc giật (flicker).
      */
-    private fun switchFragment(position: Int) {
+    private fun switchFragment(tabName: String) {
         val fragmentManager = supportFragmentManager
         val transaction = fragmentManager.beginTransaction()
 
         // 1. Hide tất cả các fragment hiện có
         suggestionFragment?.let { transaction.hide(it) }
         textToolFragment?.let { transaction.hide(it) }
-        borderToolFragment?.let{transaction.hide(it)}
+        borderToolFragment?.let { transaction.hide(it) }
 
-        // 2. Show Fragment tương ứng với Position của Tab
-        when (position) {
-            0 -> {
+        // 2. Show Fragment tương ứng với Tab
+        when (tabName) {
+            "Đề xuất" -> {
                 if (suggestionFragment == null) {
                     suggestionFragment = SuggestionFragment()
-                    // Nên định nghĩa một FrameLayout id = featureContainer trong XML Activity
                     transaction.add(R.id.featureContainer, suggestionFragment!!, "SUGGESTION")
                 } else {
                     transaction.show(suggestionFragment!!)
                 }
             }
-            1 -> {
+            "Chữ" -> {
                 if (textToolFragment == null) {
-                    textToolFragment = TextToolFragment() // Bạn cần tạo Fragment này sau
+                    textToolFragment = TextToolFragment()
                     transaction.add(R.id.featureContainer, textToolFragment!!, "TEXT_TOOL")
                 } else {
                     transaction.show(textToolFragment!!)
                 }
             }
-            4->{
+            "Viền" -> {
                 if (borderToolFragment == null) {
-                    borderToolFragment = BorderToolFragment() // Bạn cần tạo Fragment này sau
+                    borderToolFragment = BorderToolFragment()
                     transaction.add(R.id.featureContainer, borderToolFragment!!, "BORDER_TOOL")
                 } else {
                     transaction.show(borderToolFragment!!)
                 }
             }
-
             else -> {
                 suggestionFragment?.let { transaction.show(it) }
             }

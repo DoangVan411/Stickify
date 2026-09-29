@@ -35,7 +35,8 @@ class EditorPanelView @JvmOverloads constructor(
     private val tabs = listOf(
         TabItem("suggest","Đề xuất", R.drawable.ic_spark),  // Icon ngôi sao lấp lánh
         TabItem("text","Chữ", R.drawable.ic_text),         // Icon chữ T
-        TabItem("effect","Hiệu ứng", R.drawable.ic_effect),       // Icon cây đũa phép
+        // Tạm thời ẩn tính năng Hiệu ứng (xuất GIF)
+        // TabItem("effect","Hiệu ứng", R.drawable.ic_effect),
         TabItem("decore","Trang trí", R.drawable.ic_decore),     // Icon bông hoa
         TabItem("border","Viền", R.drawable.ic_border)         // Icon khung viền nét đứt
     )

@@ -22,6 +22,13 @@
     <string name="tab_collection">Bộ sưu tập</string>
     <string name="tab_resources">Tài nguyên</string>
 
+    <!-- Collection Screen -->
+    <string name="favorites">Yêu thích</string>
+    <string name="sticker_packs">Bộ sticker</string>
+    <string name="create_new_pack">Tạo bộ sticker mới</string>
+    <string name="gifs_count">%1$d GIFs</string>
+    <string name="stickers_count">%1$d miếng dán</string>
+
     <!-- Categories -->
     <string name="category_all">Tất cả</string>
     <string name="category_gifs">GIFs</string>

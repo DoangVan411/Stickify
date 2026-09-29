@@ -186,8 +186,10 @@ class StickerEditActivity : AppCompatActivity() {
     }
 
     private fun updateUndoRedoButtons(canUndo: Boolean, canRedo: Boolean) {
-        binding.btnUndo.isEnabled = canUndo
-        binding.btnUndo.alpha = if (canUndo) 1f else 0.35f
+        val legacyMode = currentProjectId == null
+        val canUndoEffective = if (legacyMode) true else canUndo
+        binding.btnUndo.isEnabled = canUndoEffective
+        binding.btnUndo.alpha = if (canUndoEffective) 1f else 0.35f
 
         binding.btnRedo.isEnabled = canRedo
         binding.btnRedo.alpha = if (canRedo) 1f else 0.35f

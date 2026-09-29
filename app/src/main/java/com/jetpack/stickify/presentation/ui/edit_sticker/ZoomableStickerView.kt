@@ -771,7 +771,7 @@ class ZoomableStickerView @JvmOverloads constructor(
     private fun maybeAddDrawDecorAt(screenX: Float, screenY: Float) {
         val brush = drawDecorBrush ?: return
         val point = screenToCanvasPoint(screenX, screenY) ?: return
-        val spacing = (currentBitmap?.width ?: 0) * brush.widthRatio * 0.35f
+        val spacing = (currentBitmap?.width ?: 0) * brush.widthRatio * 0.8f
         val dx = point.x - lastDrawCanvasX
         val dy = point.y - lastDrawCanvasY
         if (dx * dx + dy * dy >= spacing * spacing) {

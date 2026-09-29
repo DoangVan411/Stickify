@@ -76,10 +76,24 @@ class ZoomableStickerView @JvmOverloads constructor(
         var width: Float, // Width in base bitmap pixels
         var height: Float, // Height in base bitmap pixels
         var scale: Float = 1f,
-        var rotation: Float = 0f
+        var rotation: Float = 0f,
+        val isEditable: Boolean = true
     )
 
     private val decorItems = mutableListOf<DecorItemState>()
+    private data class DrawDecorBrush(
+        val id: String,
+        val bitmap: Bitmap,
+        val widthRatio: Float = 0.14f
+    )
+
+    private var drawDecorBrush: DrawDecorBrush? = null
+    private var isDrawingDecorStroke = false
+    private var lastDrawCanvasX = 0f
+    private var lastDrawCanvasY = 0f
+    private var currentDrawStrokeIds = mutableListOf<String>()
+    private val drawStrokeHistory = mutableListOf<List<String>>()
+
     private var selectedDecor: DecorItemState? = null
     private var isDraggingDecor = false
 
@@ -135,25 +149,42 @@ class ZoomableStickerView @JvmOverloads constructor(
 
     fun addDecorBitmap(bitmap: Bitmap, id: String = java.util.UUID.randomUUID().toString()) {
         val curr = currentBitmap ?: return
-        val targetWidth = curr.width * 0.45f
-        val aspect = (bitmap.width.toFloat() / bitmap.height.toFloat().coerceAtLeast(1f)).coerceAtLeast(0.01f)
-        val targetHeight = targetWidth / aspect
-
-        val decor = DecorItemState(
+        val decor = createDecorState(
             id = id,
             bitmap = bitmap,
             x = curr.width / 2f,
             y = curr.height / 2f,
-            width = targetWidth,
-            height = targetHeight
+            widthRatio = 0.45f
         )
         decorItems.add(decor)
         selectedDecor = decor
         invalidate()
     }
 
+    fun setDrawDecorBrush(bitmap: Bitmap?, id: String = java.util.UUID.randomUUID().toString()) {
+        drawDecorBrush = if (bitmap != null) DrawDecorBrush(id = id, bitmap = bitmap) else null
+        selectedDecor = null
+        isDraggingDecor = false
+        isDraggingHandle = false
+        isPanning = false
+        invalidate()
+    }
+
+    fun undoLastDrawDecorStroke(): Boolean {
+        if (drawStrokeHistory.isEmpty()) return false
+        val lastStrokeIds = drawStrokeHistory.removeAt(drawStrokeHistory.lastIndex).toHashSet()
+        if (lastStrokeIds.isEmpty()) return false
+        decorItems.removeAll { it.id in lastStrokeIds }
+        if (selectedDecor?.id in lastStrokeIds) {
+            selectedDecor = null
+        }
+        invalidate()
+        return true
+    }
+
     fun clearDecors() {
         decorItems.clear()
+        drawStrokeHistory.clear()
         selectedDecor = null
         invalidate()
     }
@@ -488,6 +519,7 @@ class ZoomableStickerView @JvmOverloads constructor(
         val currentScale = currentMatrixScale()
         for (i in decorItems.indices.reversed()) {
             val decor = decorItems[i]
+            if (!decor.isEditable) continue
             val pts = floatArrayOf(decor.x, decor.y)
             displayMatrix.mapPoints(pts)
             val screenX = pts[0]
@@ -686,6 +718,67 @@ class ZoomableStickerView @JvmOverloads constructor(
         return pts
     }
 
+    private fun createDecorState(
+        id: String,
+        bitmap: Bitmap,
+        x: Float,
+        y: Float,
+        widthRatio: Float,
+        isEditable: Boolean = true
+    ): DecorItemState {
+        val curr = currentBitmap ?: error("Current bitmap must exist before adding decor")
+        val targetWidth = curr.width * widthRatio
+        val aspect = (bitmap.width.toFloat() / bitmap.height.toFloat().coerceAtLeast(1f)).coerceAtLeast(0.01f)
+        val targetHeight = targetWidth / aspect
+        return DecorItemState(
+            id = id,
+            bitmap = bitmap,
+            x = x,
+            y = y,
+            width = targetWidth,
+            height = targetHeight,
+            isEditable = isEditable
+        )
+    }
+
+    private fun screenToCanvasPoint(screenX: Float, screenY: Float): PointF? {
+        val inverse = Matrix()
+        if (!displayMatrix.invert(inverse)) return null
+        val pts = floatArrayOf(screenX, screenY)
+        inverse.mapPoints(pts)
+        return PointF(pts[0], pts[1])
+    }
+
+    private fun addDrawDecorAt(screenX: Float, screenY: Float): Boolean {
+        val brush = drawDecorBrush ?: return false
+        val point = screenToCanvasPoint(screenX, screenY) ?: return false
+        val decor = createDecorState(
+            id = java.util.UUID.randomUUID().toString(),
+            bitmap = brush.bitmap,
+            x = point.x,
+            y = point.y,
+            widthRatio = brush.widthRatio,
+            isEditable = false
+        )
+        decorItems.add(decor)
+        currentDrawStrokeIds.add(decor.id)
+        lastDrawCanvasX = point.x
+        lastDrawCanvasY = point.y
+        invalidate()
+        return true
+    }
+
+    private fun maybeAddDrawDecorAt(screenX: Float, screenY: Float) {
+        val brush = drawDecorBrush ?: return
+        val point = screenToCanvasPoint(screenX, screenY) ?: return
+        val spacing = (currentBitmap?.width ?: 0) * brush.widthRatio * 0.35f
+        val dx = point.x - lastDrawCanvasX
+        val dy = point.y - lastDrawCanvasY
+        if (dx * dx + dy * dy >= spacing * spacing) {
+            addDrawDecorAt(screenX, screenY)
+        }
+    }
+
     // ---------- Two-finger gesture state for decor ----------
     private var prevDecorAngle = 0f
     private var prevDecorSpan = 0f
@@ -714,6 +807,13 @@ class ZoomableStickerView @JvmOverloads constructor(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                if (drawDecorBrush != null && currentBitmap != null) {
+                    currentDrawStrokeIds = mutableListOf()
+                    isDrawingDecorStroke = addDrawDecorAt(event.x, event.y)
+                    isPanning = false
+                    return true
+                }
+
                 val sel = selectedDecor
 
                 // Ưu tiên 1: Nhấn vào nhóm action (nhân bản/xoá)
@@ -780,6 +880,7 @@ class ZoomableStickerView @JvmOverloads constructor(
                 }
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
+                if (isDrawingDecorStroke) return true
                 if (isDraggingDecor && selectedDecor != null && event.pointerCount >= 2) {
                     // Bắt đầu gesture 2 ngón trên decor
                     isDecorMultiTouch = true
@@ -792,6 +893,10 @@ class ZoomableStickerView @JvmOverloads constructor(
                 }
             }
             MotionEvent.ACTION_MOVE -> {
+                if (isDrawingDecorStroke) {
+                    maybeAddDrawDecorAt(event.x, event.y)
+                    return true
+                }
                 // ---- Kéo handle góc → xoay + phóng ----
                 if (isDraggingHandle && selectedDecor != null) {
                     val sel = selectedDecor!!
@@ -873,6 +978,7 @@ class ZoomableStickerView @JvmOverloads constructor(
                 }
             }
             MotionEvent.ACTION_POINTER_UP -> {
+                if (isDrawingDecorStroke) return true
                 if (isDraggingDecor && isDecorMultiTouch) {
                     isDecorMultiTouch = false
                     val remainingIndex = if (event.actionIndex == 0) 1 else 0
@@ -889,6 +995,13 @@ class ZoomableStickerView @JvmOverloads constructor(
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (isDrawingDecorStroke) {
+                    if (currentDrawStrokeIds.isNotEmpty()) {
+                        drawStrokeHistory.add(currentDrawStrokeIds.toList())
+                    }
+                    currentDrawStrokeIds = mutableListOf()
+                    isDrawingDecorStroke = false
+                }
                 isPanning = false
                 isDraggingDecor = false
                 isDraggingHandle = false

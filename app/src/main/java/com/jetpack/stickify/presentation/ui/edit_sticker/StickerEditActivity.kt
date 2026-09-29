@@ -157,6 +157,32 @@ class StickerEditActivity : AppCompatActivity() {
                 }
             }
         }
+
+        // Thêm decor khi người dùng chọn trong DecorToolFragment
+        sharedViewModel.addedDecorEvent.observe(this) { decor ->
+            if (decor != null) {
+                binding.zoomableView.setDrawDecorBrush(null)
+                val bitmap = decor.customBitmap ?: BitmapFactory.decodeResource(resources, decor.resId)
+                if (bitmap != null) {
+                    binding.zoomableView.addDecorBitmap(bitmap, decor.id)
+                }
+            }
+        }
+
+        // Vẽ trang trí theo cử chỉ kéo
+        sharedViewModel.drawDecorModeEvent.observe(this) { decor ->
+            if (decor == null) {
+                binding.zoomableView.setDrawDecorBrush(null)
+            } else {
+                val bitmap = decor.customBitmap ?: BitmapFactory.decodeResource(resources, decor.resId)
+                binding.zoomableView.setDrawDecorBrush(bitmap, decor.id)
+            }
+        }
+
+        // Lắng nghe hiệu ứng animation được chọn để preview động
+        sharedViewModel.currentAnimation.observe(this) { animationType ->
+            binding.zoomableView.setAnimationType(animationType)
+        }
     }
 
     private fun updateUndoRedoButtons(canUndo: Boolean, canRedo: Boolean) {
@@ -165,21 +191,6 @@ class StickerEditActivity : AppCompatActivity() {
 
         binding.btnRedo.isEnabled = canRedo
         binding.btnRedo.alpha = if (canRedo) 1f else 0.35f
-
-        // 5. Thêm decor khi người dùng chọn trong DecorToolFragment
-        sharedViewModel.addedDecorEvent.observe(this) { decor ->
-            if (decor != null) {
-                val bitmap = decor.customBitmap ?: BitmapFactory.decodeResource(resources, decor.resId)
-                if (bitmap != null) {
-                    binding.zoomableView.addDecorBitmap(bitmap, decor.id)
-                }
-            }
-        }
-
-        // 6. Lắng nghe hiệu ứng animation được chọn để preview động
-        sharedViewModel.currentAnimation.observe(this) { animationType ->
-            binding.zoomableView.setAnimationType(animationType)
-        }
     }
 
     private fun setupClickListeners() {
@@ -189,6 +200,9 @@ class StickerEditActivity : AppCompatActivity() {
             if (currentProjectId != null) {
                 editViewModel.undo()
             } else {
+                if (binding.zoomableView.undoLastDrawDecorStroke()) {
+                    return@setOnClickListener
+                }
                 sharedViewModel.moveHistory(-1)
             }
         }

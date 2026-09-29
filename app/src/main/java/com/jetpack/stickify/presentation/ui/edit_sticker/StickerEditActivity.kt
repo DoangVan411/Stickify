@@ -24,6 +24,10 @@ import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextToolFragment
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.activity.viewModels
 import com.jetpack.stickify.presentation.ui.edit_sticker.border.BorderToolFragment
+import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorToolFragment
+import com.jetpack.stickify.presentation.ui.edit_sticker.effect.EffectToolFragment
+import com.jetpack.stickify.domain.model.StickerStyle
+import android.graphics.BitmapFactory
 
 /**
  * Màn hình "Chỉnh sửa" sticker:
@@ -52,6 +56,8 @@ class StickerEditActivity : AppCompatActivity() {
     private var suggestionFragment: SuggestionFragment? = null
     private var textToolFragment: TextToolFragment? = null
     private var borderToolFragment: BorderToolFragment? = null
+    private var decorToolFragment: DecorToolFragment? = null
+    private var effectToolFragment: EffectToolFragment? = null
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -107,6 +113,21 @@ class StickerEditActivity : AppCompatActivity() {
                 finish()
             }
         }
+
+        // 5. Thêm decor khi người dùng chọn trong DecorToolFragment
+        sharedViewModel.addedDecorEvent.observe(this) { decor ->
+            if (decor != null) {
+                val bitmap = decor.customBitmap ?: BitmapFactory.decodeResource(resources, decor.resId)
+                if (bitmap != null) {
+                    binding.zoomableView.addDecorBitmap(bitmap, decor.id)
+                }
+            }
+        }
+
+        // 6. Lắng nghe hiệu ứng animation được chọn để preview động
+        sharedViewModel.currentAnimation.observe(this) { animationType ->
+            binding.zoomableView.setAnimationType(animationType)
+        }
     }
 
     private fun setupClickListeners() {
@@ -116,8 +137,16 @@ class StickerEditActivity : AppCompatActivity() {
         binding.btnUndo.setOnClickListener { sharedViewModel.moveHistory(-1) }
         binding.btnRedo.setOnClickListener { sharedViewModel.moveHistory(1) }
 
-        // Gọi ViewModel thực hiện lưu ảnh
-        binding.btnCreate.setOnClickListener { sharedViewModel.saveCurrentSticker() }
+        // Gọi ViewModel thực hiện lưu ảnh (ghép decor nếu có, xuất GIF nếu có animation)
+        binding.btnCreate.setOnClickListener {
+            val baseBitmap = sharedViewModel.styleBitmaps[sharedViewModel.currentStyle.value ?: StickerStyle.ORIGINAL]
+            val finalBitmap = if (baseBitmap != null && binding.zoomableView.hasDecors()) {
+                binding.zoomableView.renderCompositeBitmap(baseBitmap)
+            } else {
+                baseBitmap
+            }
+            sharedViewModel.saveCurrentSticker(finalBitmap)
+        }
 
         binding.btnSendPrompt.setOnClickListener {
             Toast.makeText(this, "Tính năng tạo sticker AI đang được phát triển", Toast.LENGTH_SHORT).show()
@@ -152,6 +181,8 @@ class StickerEditActivity : AppCompatActivity() {
         suggestionFragment?.let { transaction.hide(it) }
         textToolFragment?.let { transaction.hide(it) }
         borderToolFragment?.let { transaction.hide(it) }
+        decorToolFragment?.let { transaction.hide(it) }
+        effectToolFragment?.let { transaction.hide(it) }
 
         // 2. Show Fragment tương ứng với Tab
         when (tabName) {
@@ -169,6 +200,22 @@ class StickerEditActivity : AppCompatActivity() {
                     transaction.add(R.id.featureContainer, textToolFragment!!, "TEXT_TOOL")
                 } else {
                     transaction.show(textToolFragment!!)
+                }
+            }
+            "Hiệu ứng" -> {
+                if (effectToolFragment == null) {
+                    effectToolFragment = EffectToolFragment()
+                    transaction.add(R.id.featureContainer, effectToolFragment!!, "EFFECT_TOOL")
+                } else {
+                    transaction.show(effectToolFragment!!)
+                }
+            }
+            "Trang trí" -> {
+                if (decorToolFragment == null) {
+                    decorToolFragment = DecorToolFragment()
+                    transaction.add(R.id.featureContainer, decorToolFragment!!, "DECOR_TOOL")
+                } else {
+                    transaction.show(decorToolFragment!!)
                 }
             }
             "Viền" -> {

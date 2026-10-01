@@ -86,9 +86,14 @@ class EditorPanelView @JvmOverloads constructor(
         // Gọi listener này khi user click vào một Tab
         tabListener?.onTabSelected(index, tabs[index].title)
 
+        // Tính toán tọa độ X để vTabHighlight nằm chính giữa selectedView
+        // selectedView.x: Tọa độ mép trái của tab
+        // (selectedView.width - viewTabHighlight.width) / 2f: Tính độ lệch để căn giữa
+        val targetX = selectedView.x + (selectedView.width - viewTabHighlight.width) / 2f
+
         // 1. Animation trượt nền xanh (vTabHighlight) đến vị trí của tab được click
         viewTabHighlight.animate()
-            .x(selectedView.x)
+            .x(targetX)
             .setDuration(300)
             .setInterpolator(OvershootInterpolator(0.8f)) // Hiệu ứng nảy nhẹ
             .start()

@@ -17,6 +17,9 @@ import com.jetpack.stickify.domain.usecase.ApplyBorderUseCase
 import com.jetpack.stickify.domain.usecase.ExportGifUseCase
 import com.jetpack.stickify.domain.model.StickerAnimationType
 import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 @HiltViewModel // Sử dụng Hilt để Inject
 class StickerSharedViewModel @Inject constructor(
@@ -28,6 +31,9 @@ class StickerSharedViewModel @Inject constructor(
 
     private val _isLoading = MutableLiveData<Boolean>()
     val isLoading: LiveData<Boolean> get() = _isLoading
+
+    // Biến để lưu trữ tiến trình vẽ viền hiện tại
+    private var borderProcessJob: Job? = null
 
     // Lưu trữ ảnh trong RAM cho phiên làm việc
     val styleBitmaps = mutableMapOf<StickerStyle, Bitmap>()
@@ -201,6 +207,8 @@ class StickerSharedViewModel @Inject constructor(
     }
 
     private fun processNewBorderSticker() {
+
+        borderProcessJob?.cancel()
         val currentSelectedStyle = _currentStyle.value ?: return
 
         // 1. Xác định LÕI SẠCH dựa trên cái đang chọn
@@ -213,7 +221,9 @@ class StickerSharedViewModel @Inject constructor(
         // 2. Lấy bức ảnh sạch chưa có viền ra
         val coreImage = coreBitmaps[baseStyle] ?: return
 
-        viewModelScope.launch {
+        // Tạo một Job mới
+        borderProcessJob  = viewModelScope.launch {
+            delay(300.milliseconds)
             _isLoading.value = true
             try {
                 val thickness = currentBorderThickness.value ?: 30

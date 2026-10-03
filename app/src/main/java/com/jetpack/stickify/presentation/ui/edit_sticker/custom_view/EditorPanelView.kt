@@ -79,6 +79,13 @@ class EditorPanelView @JvmOverloads constructor(
             animateTabSelection(0, llTabContainer.getChildAt(0))
         }
     }
+    fun selectTab(index: Int) {
+        // Kiểm tra an toàn xem index có tồn tại trong danh sách View không
+        if (index >= 0 && index < llTabContainer.childCount) {
+            val targetView = llTabContainer.getChildAt(index)
+            animateTabSelection(index, targetView)
+        }
+    }
 
     private fun animateTabSelection(index: Int, selectedView: View) {
         currentTabIndex = index

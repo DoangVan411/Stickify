@@ -1,5 +1,7 @@
 package com.jetpack.stickify.presentation.ui.edit_sticker
 
+import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -22,6 +24,12 @@ import com.jetpack.stickify.presentation.ui.edit_sticker.suggestion.SuggestionFr
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextToolFragment
 import com.jetpack.stickify.domain.model.StickerStyle
 import android.graphics.BitmapFactory
+import android.graphics.Color
+import android.graphics.Typeface
+import android.view.Gravity
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
+import com.jetpack.stickify.domain.model.TextAlign
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
@@ -51,12 +59,18 @@ class StickerEditActivity : AppCompatActivity() {
 
     // Lưu trữ tham chiếu đến các Fragment để thực hiện logic Hide/Show
     private var suggestionFragment: SuggestionFragment? = null
-    private var textToolFragment: TextToolFragment? = null
     private var borderToolFragment: BorderToolFragment? = null
     private var decorToolFragment: DecorToolFragment? = null
     private var effectToolFragment: EffectToolFragment? = null
 
     private var currentProjectId: String? = null
+
+    // Thêm biến state để lưu trạng thái chữ hiện tại
+    private var currentTextAlign: TextAlign = TextAlign.CENTER
+    private var currentTextColor = Color.WHITE
+    private var editingTextLayerId: String? = null
+
+    private var previousTabIndex = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,6 +79,7 @@ class StickerEditActivity : AppCompatActivity() {
         setupClickListeners()
         setupObservers()
         setupEditorTabMenu()
+        setupTextOverlayLogic()
 
         // 1. Kiểm tra nếu có projectId chuyển sang từ RecentProjectAdapter (Room DB Clean Architecture flow)
         val projectId = intent.getStringExtra(EXTRA_PROJECT_ID)
@@ -237,11 +252,110 @@ class StickerEditActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupTextOverlayLogic() {
+        val layoutText = binding.addTextLayout
+
+        setupDoubleTapToEditText()
+
+        // 1. Logic hoàn tất khi BẤM RA NGOÀI nền đen (textInputOverlay)
+        layoutText.textInputOverlay.setOnClickListener {
+            val input = layoutText.etOverlayText.text.toString().trim()
+
+            if (input.isNotEmpty()) {
+                if (editingTextLayerId != null) {
+                    // Sửa chữ cũ
+                    editViewModel.updateTextLayer(
+                        layerId = editingTextLayerId!!,
+                        newContent = input,
+                        newColor = currentTextColor,
+                        newAlign = currentTextAlign
+                    )
+                } else {
+                    // Tạo chữ mới
+                    editViewModel.addTextLayer(
+                        content = input,
+                        color = currentTextColor,
+                        align = currentTextAlign
+                    )
+                }
+            }
+
+            layoutText.textInputOverlay.visibility = View.GONE
+            layoutText.etOverlayText.clearFocus()
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.hideSoftInputFromWindow(layoutText.etOverlayText.windowToken, 0)
+
+            binding.editorPanel.selectTab(previousTabIndex)
+            editingTextLayerId = null // Reset ID sau khi lưu xong
+        }
+
+        // 2. Chặn sự kiện click thủng (Nếu bấm vào EditText hoặc ScrollView thì không bị tắt)
+        layoutText.etOverlayText.setOnClickListener { /* Consume click */ }
+        layoutText.fontScrollView.setOnClickListener { /* Consume click */ }
+        layoutText.llTextTopTools.setOnClickListener { /* Consume click */ }
+
+        // 3. Xử lý Căn lề (Xoay vòng: Giữa -> Trái -> Phải -> Giữa...)
+        layoutText.btnTextAlign.setOnClickListener {
+            val nextGravity = when (layoutText.etOverlayText.gravity and Gravity.HORIZONTAL_GRAVITY_MASK) {
+                Gravity.CENTER_HORIZONTAL -> Gravity.START
+                Gravity.START, Gravity.LEFT -> Gravity.END
+                else -> Gravity.CENTER_HORIZONTAL
+            }
+
+            layoutText.etOverlayText.gravity = nextGravity
+
+            // Dùng hàm extension .toTextAlign() để chuyển đổi an toàn sang Domain model
+            currentTextAlign = nextGravity.toTextAlign()
+        }
+
+        // 4. Xử lý đổi Font chữ
+        layoutText.fontDefault.setOnClickListener {
+            layoutText.etOverlayText.typeface = Typeface.DEFAULT
+        }
+        layoutText.fontTypewriter.setOnClickListener {
+            layoutText.etOverlayText.typeface = Typeface.MONOSPACE
+        }
+        layoutText.fontBold.setOnClickListener {
+            layoutText.etOverlayText.typeface = Typeface.DEFAULT_BOLD
+        }
+    }
+
+    private fun setupDoubleTapToEditText() {
+        binding.zoomableView.onTextLayerDoubleTapped = { textLayer ->
+            editingTextLayerId = textLayer.id
+            currentTextColor = textLayer.colorArgb
+            currentTextAlign = textLayer.align
+
+            val layoutText = binding.addTextLayout
+            layoutText.textInputOverlay.visibility = View.VISIBLE
+            layoutText.etOverlayText.setText(textLayer.content)
+            layoutText.etOverlayText.setSelection(textLayer.content.length)
+
+            // Căn lề tương ứng
+            layoutText.etOverlayText.gravity = when (textLayer.align) {
+                TextAlign.LEFT -> android.view.Gravity.START
+                TextAlign.CENTER -> android.view.Gravity.CENTER
+                TextAlign.RIGHT -> android.view.Gravity.END
+            }
+
+            layoutText.etOverlayText.requestFocus()
+            layoutText.etOverlayText.postDelayed({
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                imm.showSoftInput(layoutText.etOverlayText, InputMethodManager.SHOW_IMPLICIT)
+            }, 100)
+        }
+    }
+
     private fun setupEditorTabMenu() {
         binding.editorPanel.setOnTabSelectedListener(
             object : EditorPanelView.OnTabSelectedListener {
                 override fun onTabSelected(position: Int, tabName: String) {
+
+                    if (tabName != "Chữ" && tabName != "text") {
+                        previousTabIndex = position
+                    }
                     switchFragment(tabName)
+
                 }
             }
         )
@@ -253,7 +367,6 @@ class StickerEditActivity : AppCompatActivity() {
         val transaction = fragmentManager.beginTransaction()
 
         suggestionFragment?.let { transaction.hide(it) }
-        textToolFragment?.let { transaction.hide(it) }
         borderToolFragment?.let { transaction.hide(it) }
         decorToolFragment?.let { transaction.hide(it) }
         effectToolFragment?.let { transaction.hide(it) }
@@ -269,12 +382,18 @@ class StickerEditActivity : AppCompatActivity() {
                 }
             }
             "Chữ" -> {
-                if (textToolFragment == null) {
-                    textToolFragment = TextToolFragment()
-                    transaction.add(R.id.featureContainer, textToolFragment!!, "TEXT_TOOL")
-                } else {
-                    transaction.show(textToolFragment!!)
-                }
+                editingTextLayerId = null // Tạo mới hoàn toàn -> Reset ID
+                currentTextAlign = TextAlign.CENTER // Mặc định căn giữa
+                binding.addTextLayout.etOverlayText.gravity = Gravity.CENTER
+
+                binding.addTextLayout.textInputOverlay.visibility = View.VISIBLE
+                binding.addTextLayout.etOverlayText.setText("")
+                binding.addTextLayout.etOverlayText.requestFocus()
+
+                binding.addTextLayout.etOverlayText.postDelayed({
+                    val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                    imm.showSoftInput(binding.addTextLayout.etOverlayText, InputMethodManager.SHOW_IMPLICIT)
+                }, 100)
             }
             "Hiệu ứng" -> {
                 if (effectToolFragment == null) {
@@ -305,5 +424,21 @@ class StickerEditActivity : AppCompatActivity() {
             }
         }
         transaction.commit()
+    }
+
+    private fun TextAlign.toGravity(): Int {
+        return when (this) {
+            TextAlign.LEFT -> Gravity.START
+            TextAlign.CENTER -> Gravity.CENTER
+            TextAlign.RIGHT -> Gravity.END
+        }
+    }
+
+    private fun Int.toTextAlign(): TextAlign {
+        return when (this) {
+            Gravity.START, Gravity.LEFT -> TextAlign.LEFT
+            Gravity.END, Gravity.RIGHT -> TextAlign.RIGHT
+            else -> TextAlign.CENTER
+        }
     }
 }

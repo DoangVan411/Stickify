@@ -36,10 +36,18 @@ class ZoomableStickerView @JvmOverloads constructor(
         private const val CHECKER_TILE_DP = 12f
     }
 
+
+
     private var currentBitmap: Bitmap? = null
     private var previousBitmap: Bitmap? = null
     private var crossfadeProgress = 1f
     private var crossfadeAnimator: ValueAnimator? = null
+
+    // Khai báo trên cùng của ZoomableStickerView
+    var onTextLayerDoubleTapped: ((TextLayer) -> Unit)? = null
+
+    private var lastTapTimeMs: Long = 0
+    private var lastTappedLayerId: String? = null
 
     // Multi-layer rendering support
     private var projectContent: ProjectContent? = null
@@ -811,11 +819,28 @@ class ZoomableStickerView @JvmOverloads constructor(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+
+
+
+
                 if (drawDecorBrush != null && currentBitmap != null) {
                     currentDrawStrokeIds = mutableListOf()
                     isDrawingDecorStroke = addDrawDecorAt(event.x, event.y)
                     isPanning = false
                     return true
+                }
+
+                val hitLayer = getLayerAt(event.x, event.y)
+                if (hitLayer != null) {
+                    val currentTime = System.currentTimeMillis()
+                    // Bắt sự kiện Double Tap dưới 300ms vào cùng 1 TextLayer
+                    if (hitLayer.id == lastTappedLayerId && (currentTime - lastTapTimeMs) < 300) {
+                        if (hitLayer is TextLayer) {
+                            onTextLayerDoubleTapped?.invoke(hitLayer)
+                        }
+                    }
+                    lastTapTimeMs = currentTime
+                    lastTappedLayerId = hitLayer.id
                 }
 
                 val sel = selectedDecor
@@ -859,6 +884,7 @@ class ZoomableStickerView @JvmOverloads constructor(
                 // Ưu tiên 3: Nhấn vào decor → kéo
                 val hitDecor = getDecorAt(event.x, event.y)
                 if (hitDecor != null) {
+
                     selectedDecor = hitDecor
                     decorItems.remove(hitDecor)
                     decorItems.add(hitDecor)
@@ -1027,6 +1053,54 @@ class ZoomableStickerView @JvmOverloads constructor(
         return sum / event.pointerCount
     }
 
+    fun addTextItem(text: String, textColor: Int = Color.WHITE) {
+        if (text.isBlank()) return
+
+        // 1. Setup Paint để vẽ chữ
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = textColor
+            textSize = 120f // Kích thước chữ gốc (sẽ còn scale được bằng 2 ngón tay)
+            typeface = Typeface.DEFAULT_BOLD // Có thể truyền font từ ngoài vào
+            textAlign = Paint.Align.LEFT
+        }
+
+        // Tách dòng nếu có xuống dòng (\n)
+        val lines = text.split("\n")
+
+        // 2. Tính toán kích thước bức ảnh cần tạo dựa trên độ dài của chữ
+        var maxWidth = 0f
+        var totalHeight = 0f
+        val textHeight = paint.descent() - paint.ascent()
+
+        for (line in lines) {
+            val width = paint.measureText(line)
+            if (width > maxWidth) maxWidth = width
+            totalHeight += textHeight
+        }
+
+        // Tạo padding cho an toàn không bị lẹm viền
+        val padding = 40
+        val bmpWidth = (maxWidth + padding * 2).toInt()
+        val bmpHeight = (totalHeight + padding * 2).toInt()
+
+        // 3. Tạo Bitmap trong suốt và dùng Canvas vẽ chữ lên đó
+        val textBitmap = Bitmap.createBitmap(bmpWidth, bmpHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(textBitmap)
+
+        var y = padding - paint.ascent()
+        for (line in lines) {
+            // Căn giữa từng dòng
+            val lineWidth = paint.measureText(line)
+            val x = padding + (maxWidth - lineWidth) / 2f
+            canvas.drawText(line, x, y, paint)
+            y += textHeight
+        }
+
+        // 4. Tái sử dụng hàm addDecorBitmap có sẵn của bạn!
+        // Chữ bây giờ đã là 1 bức ảnh và hoàn toàn có thể kéo/xoay/phóng to bằng các logic có sẵn
+        addDecorBitmap(textBitmap, java.util.UUID.randomUUID().toString())
+    }
+
     private inner class ScaleListener : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(detector: ScaleGestureDetector): Boolean {
             // Khi đang thao tác trên decor, bỏ qua ScaleGestureDetector (dùng logic tự tính span)
@@ -1047,5 +1121,38 @@ class ZoomableStickerView @JvmOverloads constructor(
         val values = FloatArray(9)
         displayMatrix.getValues(values)
         return values[Matrix.MSCALE_X]
+    }
+    // Hàm kiểm tra xem điểm chạm (touchX, touchY) có nằm trong vùng của Layer không
+    private fun getLayerAt(touchX: Float, touchY: Float): Layer? {
+        val content = projectContent ?: return null
+        val currentScale = currentMatrixScale()
+
+        // Duyệt từ trên xuống (layer vẽ sau cùng nằm ở trên cùng)
+        for (i in content.layers.indices.reversed()) {
+            val layer = content.layers[i]
+            if (!layer.visible) continue
+
+            val tf = layer.transform
+            // Tính tọa độ trung tâm layer trên màn hình
+            val pts = floatArrayOf(tf.cx, tf.cy)
+            displayMatrix.mapPoints(pts)
+            val screenX = pts[0]
+            val screenY = pts[1]
+
+            // Ước lượng kích thước bounding box của layer
+            val boxWidth = 300f * tf.scale * currentScale
+            val boxHeight = 150f * tf.scale * currentScale
+
+            val localX = touchX - screenX
+            val localY = touchY - screenY
+            val rad = Math.toRadians(-tf.rotationDeg.toDouble())
+            val rotX = (localX * Math.cos(rad) - localY * Math.sin(rad)).toFloat()
+            val rotY = (localX * Math.sin(rad) + localY * Math.cos(rad)).toFloat()
+
+            if (rotX in -boxWidth/2f..boxWidth/2f && rotY in -boxHeight/2f..boxHeight/2f) {
+                return layer
+            }
+        }
+        return null
     }
 }

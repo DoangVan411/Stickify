@@ -239,4 +239,34 @@ class StickerEditViewModel @Inject constructor(
             }
         }
     }
+    fun addTextLayer(content: String, color: Int, align: TextAlign) {
+        val currentSession = _uiState.value.editorSession
+        val newLayerId = "layer_text_${System.currentTimeMillis()}"
+        val newLayer = TextLayer(
+            id = newLayerId,
+            transform = Transform(cx = 256f, cy = 256f, scale = 1f),
+            visible = true,
+            content = content,
+            colorArgb = color,
+            align = align
+        )
+        val action = AddLayerAction(layer = newLayer, index = currentSession.content.layers.size)
+        performAction(action)
+    }
+
+    fun updateTextLayer(layerId: String, newContent: String, newColor: Int, newAlign: TextAlign) {
+        val currentSession = _uiState.value.editorSession
+        val oldLayer = currentSession.content.layers.find { it.id == layerId } as? TextLayer ?: return
+
+        // Dùng hàm copy() của Kotlin data class để cập nhật nội dung mới
+        // nhưng vẫn giữ nguyên toàn bộ Transform (cx, cy, scale, rotationDeg) cũ.
+        val newLayer = oldLayer.copy(
+            content = newContent,
+            colorArgb = newColor,
+            align = newAlign
+        )
+
+        val action = UpdateLayerAction(before = oldLayer, after = newLayer)
+        performAction(action)
+    }
 }

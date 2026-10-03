@@ -3,6 +3,7 @@ package com.jetpack.stickify.data.source.local
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
 import com.jetpack.stickify.domain.model.AssetRef
 import com.jetpack.stickify.domain.model.BuiltinAsset
 import com.jetpack.stickify.domain.model.CustomAsset
@@ -66,16 +67,52 @@ class AssetLoader @Inject constructor(
                 }
             }
         }
+
+        val resNames = listOf(
+            builtinAsset.assetId.substringBeforeLast("."),
+            "img_${builtinAsset.assetId.substringBeforeLast(".")}",
+            builtinAsset.assetId
+        )
+        for (resName in resNames) {
+            val resId = context.resources.getIdentifier(resName, "drawable", context.packageName)
+            if (resId != 0) {
+                val bmp = BitmapFactory.decodeResource(context.resources, resId)
+                if (bmp != null) return bmp
+            }
+        }
+
         return null
     }
 
     private fun loadCustomAsset(customAsset: CustomAsset): Bitmap? {
-        val file = File(context.filesDir, customAsset.relativePath)
-        return if (file.exists()) {
-            BitmapFactory.decodeFile(file.absolutePath)
-        } else {
-            null
+        val path = customAsset.relativePath
+        if (path.isBlank()) return null
+
+        if (path.startsWith("content://") || path.startsWith("file://")) {
+            return try {
+                val uri = Uri.parse(path)
+                context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    BitmapFactory.decodeStream(inputStream)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
+            }
         }
+
+        val directFile = File(path)
+        if (directFile.exists()) {
+            val bmp = BitmapFactory.decodeFile(directFile.absolutePath)
+            if (bmp != null) return bmp
+        }
+
+        val appFile = File(context.filesDir, path)
+        if (appFile.exists()) {
+            val bmp = BitmapFactory.decodeFile(appFile.absolutePath)
+            if (bmp != null) return bmp
+        }
+
+        return null
     }
 
     private fun loadRemoteAsset(remoteAsset: RemoteAsset): Bitmap? {

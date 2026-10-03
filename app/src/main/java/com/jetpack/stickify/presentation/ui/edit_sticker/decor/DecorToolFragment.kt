@@ -82,7 +82,7 @@ class DecorToolFragment : Fragment() {
             if (item.isImportAction) {
                 pickImageLauncher.launch("image/*")
             } else {
-                sharedViewModel.addDecor(item.resId)
+                sharedViewModel.addDecor(item.resId, item.id)
             }
         }
     }

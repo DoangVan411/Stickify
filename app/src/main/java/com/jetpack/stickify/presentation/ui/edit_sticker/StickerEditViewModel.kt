@@ -2,6 +2,7 @@ package com.jetpack.stickify.presentation.ui.edit_sticker
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -119,14 +120,46 @@ class StickerEditViewModel @Inject constructor(
         }
     }
 
+    fun initNewProject(projectId: String, imageUriString: String) {
+        val subjectLayer = SubjectLayer(
+            id = "layer_subject_main",
+            transform = Transform(cx = 256f, cy = 256f, scale = 1f),
+            visible = true,
+            source = CustomAsset(imageUriString),
+            styledPath = imageUriString
+        )
+        val newContent = ProjectContent(
+            canvas = CanvasSpec(width = 512, height = 512),
+            layers = listOf(subjectLayer)
+        )
+        val newHistory = EditHistory(
+            undo = listOf(AddLayerAction(layer = subjectLayer, index = 0)),
+            redo = emptyList()
+        )
+        val newSession = EditorSession(content = newContent, history = newHistory)
+        _uiState.update {
+            it.copy(
+                projectId = projectId,
+                projectName = "Sticker ${System.currentTimeMillis() % 1000}",
+                editorSession = newSession,
+                canUndo = newSession.history.canUndo,
+                canRedo = newSession.history.canRedo
+            )
+        }
+    }
+
     fun performAction(action: EditAction) {
         val currentSession = _uiState.value.editorSession
         currentSession.perform(action)
+        val updatedSession = EditorSession(
+            content = currentSession.content,
+            history = currentSession.history
+        )
         _uiState.update {
             it.copy(
-                editorSession = currentSession,
-                canUndo = currentSession.history.canUndo,
-                canRedo = currentSession.history.canRedo
+                editorSession = updatedSession,
+                canUndo = updatedSession.history.canUndo,
+                canRedo = updatedSession.history.canRedo
             )
         }
     }
@@ -216,20 +249,38 @@ class StickerEditViewModel @Inject constructor(
         }
     }
 
-    fun saveProject() {
+    fun saveProjectWithDetails(
+        projectId: String,
+        borderThickness: Float,
+        borderDistance: Float,
+        borderColor: Int,
+        animationType: StickerAnimationType
+    ) {
         val currentState = _uiState.value
-        val pId = currentState.projectId ?: return
+        val speed = when (animationType) {
+            StickerAnimationType.NONE -> PlaybackSpeed.X1
+            StickerAnimationType.BOUNCE -> PlaybackSpeed.X1
+            StickerAnimationType.SHAKE -> PlaybackSpeed.X2
+            StickerAnimationType.SPIN -> PlaybackSpeed.X2
+            StickerAnimationType.PULSE -> PlaybackSpeed.X4
+            StickerAnimationType.WOBBLE -> PlaybackSpeed.X4
+        }
+        val updatedContent = currentState.editorSession.content.copy(
+            border = BorderStyle(thickness = borderThickness, spacing = borderDistance, colorArgb = borderColor),
+            playback = Playback(speed = speed, loop = true)
+        )
+        val updatedSession = EditorSession(content = updatedContent, history = currentState.editorSession.history)
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
+            _uiState.update { it.copy(projectId = projectId, isLoading = true, editorSession = updatedSession) }
 
             val result = saveProjectUseCase(
-                projectId = pId,
+                projectId = projectId,
                 projectName = currentState.projectName,
                 projectType = currentState.projectType,
                 origin = currentState.origin,
                 thumbnailPath = currentState.thumbnailPath,
-                editorSession = currentState.editorSession
+                editorSession = updatedSession
             )
 
             result.onSuccess {
@@ -238,6 +289,56 @@ class StickerEditViewModel @Inject constructor(
                 _uiState.update { it.copy(isLoading = false, error = e.message) }
             }
         }
+    }
+
+    fun saveProject() {
+        val currentState = _uiState.value
+        val pId = currentState.projectId ?: "proj_${System.currentTimeMillis()}"
+        saveProjectWithDetails(
+            projectId = pId,
+            borderThickness = currentState.editorSession.content.border?.thickness ?: 30f,
+            borderDistance = currentState.editorSession.content.border?.spacing ?: 20f,
+            borderColor = currentState.editorSession.content.border?.colorArgb ?: Color.WHITE,
+            animationType = StickerAnimationType.NONE
+        )
+    }
+
+    fun updateBorder(thickness: Float, distance: Float, colorArgb: Int) {
+        val currentSession = _uiState.value.editorSession
+        val oldBorder = currentSession.content.border
+        val newBorder = BorderStyle(thickness = thickness, spacing = distance, colorArgb = colorArgb)
+        val action = ChangeBorderAction(before = oldBorder, after = newBorder)
+        performAction(action)
+    }
+
+    fun updateAnimation(animationType: StickerAnimationType) {
+        val currentSession = _uiState.value.editorSession
+        val oldPlayback = currentSession.content.playback
+        val newSpeed = when (animationType) {
+            StickerAnimationType.NONE -> PlaybackSpeed.X1
+            StickerAnimationType.BOUNCE -> PlaybackSpeed.X1
+            StickerAnimationType.SHAKE -> PlaybackSpeed.X2
+            StickerAnimationType.SPIN -> PlaybackSpeed.X2
+            StickerAnimationType.PULSE -> PlaybackSpeed.X4
+            StickerAnimationType.WOBBLE -> PlaybackSpeed.X4
+        }
+        val action = ChangeSpeedAction(before = oldPlayback?.speed ?: PlaybackSpeed.X1, after = newSpeed)
+        performAction(action)
+    }
+
+    fun addBuiltinDecoration(assetId: String, packId: String = "pack_default", category: DecorationCategory = DecorationCategory.LABEL) {
+        val currentSession = _uiState.value.editorSession
+        val newLayerId = "layer_dec_${System.currentTimeMillis()}"
+        val asset = BuiltinAsset(assetId = assetId, packId = packId)
+        val newLayer = DecorationLayer(
+            id = newLayerId,
+            transform = Transform(cx = 256f, cy = 256f, scale = 1f),
+            visible = true,
+            asset = asset,
+            category = category
+        )
+        val action = AddLayerAction(layer = newLayer, index = currentSession.content.layers.size)
+        performAction(action)
     }
     fun addTextLayer(content: String, color: Int, align: TextAlign) {
         val currentSession = _uiState.value.editorSession

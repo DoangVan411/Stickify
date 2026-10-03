@@ -10,7 +10,6 @@
     android:focusable="true"
     android:visibility="gone">
 
-    <!-- Bộ 3 công cụ ở giữa phía trên giống Facebook Story -->
     <LinearLayout
         android:id="@+id/llTextTopTools"
         android:layout_width="wrap_content"
@@ -25,18 +24,18 @@
         <!-- Nút chọn màu -->
         <ImageButton
             android:id="@+id/btnTextColor"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
             android:layout_marginEnd="24dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:scaleType="fitCenter"
-            android:src="@drawable/ic_spark" /> <!-- TODO: Đổi thành icon Bánh xe màu -->
+            android:src="@drawable/ic_palette" /> <!-- TODO: Đổi thành icon Bánh xe màu -->
 
         <!-- Nút bọc nền chữ (Chữ T) -->
         <ImageButton
             android:id="@+id/btnTextBackground"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
             android:layout_marginEnd="24dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:scaleType="fitCenter"
@@ -45,11 +44,11 @@
         <!-- Nút căn lề (Trái/Giữa/Phải) -->
         <ImageButton
             android:id="@+id/btnTextAlign"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:scaleType="fitCenter"
-            android:src="@drawable/ic_border" /> <!-- TODO: Đổi thành icon Căn lề -->
+            android:src="@drawable/ic_align_left" /> <!-- TODO: Đổi thành icon Căn lề -->
     </LinearLayout>
 
     <EditText
@@ -59,15 +58,15 @@
         android:layout_marginHorizontal="32dp"
         android:background="@null"
         android:gravity="center"
-        android:hint="Nhập gì đó..."
+        android:hint="@string/press_somethign"
         android:inputType="textMultiLine"
         android:textColor="@android:color/white"
         android:textColorHint="#99FFFFFF"
-        android:textSize="32sp"
+        android:textSize="24sp"
         app:layout_constraintBottom_toTopOf="@+id/fontScrollView"
         app:layout_constraintTop_toBottomOf="@+id/llTextTopTools" />
 
-    <!-- Thanh chọn Font chữ ở dưới cùng -->
+
     <HorizontalScrollView
         android:id="@+id/fontScrollView"
         android:layout_width="match_parent"

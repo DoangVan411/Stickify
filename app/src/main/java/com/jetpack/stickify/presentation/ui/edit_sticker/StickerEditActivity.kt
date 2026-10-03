@@ -23,6 +23,7 @@ import com.jetpack.stickify.presentation.ui.edit_sticker.effect.EffectToolFragme
 import com.jetpack.stickify.presentation.ui.edit_sticker.suggestion.SuggestionFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextToolFragment
 import com.jetpack.stickify.domain.model.StickerStyle
+import com.jetpack.stickify.domain.model.StickerAnimationType
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
@@ -32,6 +33,8 @@ import android.widget.EditText
 import com.jetpack.stickify.domain.model.TextAlign
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import androidx.activity.OnBackPressedCallback // Nhớ thêm import này
+import com.jetpack.stickify.presentation.ui.edit_sticker.cancel.SaveConfirmDialogFragment
 
 /**
  * Màn hình "Chỉnh sửa" sticker:
@@ -72,6 +75,9 @@ class StickerEditActivity : AppCompatActivity() {
 
     private var previousTabIndex = 0
 
+    // Thêm cờ này để chặn onStop lưu thumbnail nếu chọn "Không lưu"
+    private var isDiscardingChanges = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = DataBindingUtil.setContentView(this, R.layout.activity_sticker_edit)
@@ -80,6 +86,8 @@ class StickerEditActivity : AppCompatActivity() {
         setupObservers()
         setupEditorTabMenu()
         setupTextOverlayLogic()
+        setupBackPressHandler() //  Đăng ký Back stack
+        setupSaveConfirmDialogListener()// setup comfirm
 
         // 1. Kiểm tra nếu có projectId chuyển sang từ RecentProjectAdapter (Room DB Clean Architecture flow)
         val projectId = intent.getStringExtra(EXTRA_PROJECT_ID)
@@ -92,6 +100,7 @@ class StickerEditActivity : AppCompatActivity() {
         // 2. Kiểm tra nếu mở từ CutoutActivity qua Uri (Legacy Flow)
         val uri: Uri? = intent.getParcelableExtra(EXTRA_CROPPED_IMAGE_URI)
         if (uri != null) {
+            currentProjectId = "proj_${System.currentTimeMillis()}"
             sharedViewModel.loadAndPrepareStyles(uri.toString())
         } else {
             Toast.makeText(this, "Không nhận được dữ liệu project hoặc ảnh đầu vào", Toast.LENGTH_LONG).show()
@@ -114,62 +123,28 @@ class StickerEditActivity : AppCompatActivity() {
     }
 
     private fun setupObservers() {
-        // Observers cho SharedViewModel (Legacy Flow)
+        // Observers cho SharedViewModel
         sharedViewModel.isLoading.observe(this) { isLoading ->
-            if (currentProjectId == null) {
-                binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
-            }
+            binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
         }
 
         sharedViewModel.currentStyle.observe(this) { style ->
-            if (currentProjectId == null) {
-                val bitmap = sharedViewModel.styleBitmaps[style]
-                if (bitmap != null) {
-                    binding.zoomableView.setBitmap(bitmap, animate = true)
-                }
+            val bitmap = sharedViewModel.styleBitmaps[style]
+            if (bitmap != null) {
+                binding.zoomableView.setBitmap(bitmap, animate = true)
             }
         }
 
         sharedViewModel.historyState.observe(this) { (canUndo, canRedo) ->
-            if (currentProjectId == null) {
-                updateUndoRedoButtons(canUndo, canRedo)
-            }
+            updateUndoRedoButtons(canUndo, canRedo)
         }
 
         sharedViewModel.saveSuccessEvent.observe(this) { savedUriString ->
-            if (currentProjectId == null && savedUriString != null) {
+            if (savedUriString != null) {
                 val resultUri = Uri.parse(savedUriString)
                 setResult(RESULT_OK, Intent().putExtra(EXTRA_RESULT_URI, resultUri))
                 Toast.makeText(this, "Đã tạo sticker thành công!", Toast.LENGTH_SHORT).show()
                 finish()
-            }
-        }
-
-        // Observers cho StickerEditViewModel (Clean Architecture Flow từ Room Database)
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                editViewModel.uiState.collect { state ->
-                    if (currentProjectId != null) {
-                        binding.progressBar.visibility = if (state.isLoading) View.VISIBLE else View.GONE
-                        updateUndoRedoButtons(state.canUndo, state.canRedo)
-
-                        // Truyền ProjectContent và AssetLoader vào ZoomableStickerView để render đa layer
-                        binding.zoomableView.setProjectContent(
-                            content = state.editorSession.content,
-                            loader = editViewModel.assetLoader
-                        )
-
-                        if (state.isSaveSuccess) {
-                            Toast.makeText(this@StickerEditActivity, "Đã lưu project thành công!", Toast.LENGTH_SHORT).show()
-                            setResult(RESULT_OK)
-                            finish()
-                        }
-
-                        if (!state.error.isNullOrBlank()) {
-                            Toast.makeText(this@StickerEditActivity, state.error, Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                }
             }
         }
 
@@ -198,6 +173,23 @@ class StickerEditActivity : AppCompatActivity() {
         sharedViewModel.currentAnimation.observe(this) { animationType ->
             binding.zoomableView.setAnimationType(animationType)
         }
+
+        // Observer cho StickerEditViewModel
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                editViewModel.uiState.collect { state ->
+                    if (state.isSaveSuccess) {
+                        Toast.makeText(this@StickerEditActivity, "Đã lưu project thành công!", Toast.LENGTH_SHORT).show()
+                        setResult(RESULT_OK)
+                        finish()
+                    }
+
+                    if (!state.error.isNullOrBlank()) {
+                        Toast.makeText(this@StickerEditActivity, state.error, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
     }
 
     private fun updateUndoRedoButtons(canUndo: Boolean, canRedo: Boolean) {
@@ -211,7 +203,7 @@ class StickerEditActivity : AppCompatActivity() {
     }
 
     private fun setupClickListeners() {
-        binding.btnBack.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
+        binding.btnBack.setOnClickListener { showSaveConfirmationDialog() }
 
         binding.btnUndo.setOnClickListener {
             if (currentProjectId != null) {
@@ -234,17 +226,7 @@ class StickerEditActivity : AppCompatActivity() {
 
         // Gọi ViewModel thực hiện lưu ảnh (ghép decor nếu có, xuất GIF nếu có animation) hoặc lưu project
         binding.btnCreate.setOnClickListener {
-            if (currentProjectId != null) {
-                editViewModel.saveProject()
-            } else {
-                val baseBitmap = sharedViewModel.styleBitmaps[sharedViewModel.currentStyle.value ?: StickerStyle.ORIGINAL]
-                val finalBitmap = if (baseBitmap != null && binding.zoomableView.hasDecors()) {
-                    binding.zoomableView.renderCompositeBitmap(baseBitmap)
-                } else {
-                    baseBitmap
-                }
-                sharedViewModel.saveCurrentSticker(finalBitmap)
-            }
+            handleSaveProjectAction()
         }
 
         binding.btnSendPrompt.setOnClickListener {
@@ -262,22 +244,18 @@ class StickerEditActivity : AppCompatActivity() {
             val input = layoutText.etOverlayText.text.toString().trim()
 
             if (input.isNotEmpty()) {
-                if (editingTextLayerId != null) {
-                    // Sửa chữ cũ
-                    editViewModel.updateTextLayer(
-                        layerId = editingTextLayerId!!,
-                        newContent = input,
-                        newColor = currentTextColor,
-                        newAlign = currentTextAlign
-                    )
-                } else {
-                    // Tạo chữ mới
-                    editViewModel.addTextLayer(
-                        content = input,
-                        color = currentTextColor,
-                        align = currentTextAlign
-                    )
+                if (currentProjectId != null) {
+                    if (editingTextLayerId != null) {
+                        editViewModel.updateTextLayer(editingTextLayerId!!, input, currentTextColor, currentTextAlign)
+                    } else {
+                        editViewModel.addTextLayer(input, currentTextColor, currentTextAlign)
+                    }
                 }
+                binding.zoomableView.addTextItem(
+                    text = input,
+                    textColor = currentTextColor,
+                    existingId = editingTextLayerId
+                )
             }
 
             layoutText.textInputOverlay.visibility = View.GONE
@@ -321,29 +299,43 @@ class StickerEditActivity : AppCompatActivity() {
     }
 
     private fun setupDoubleTapToEditText() {
+        // Lắng nghe Double Tap từ luồng mới (TextLayer)
         binding.zoomableView.onTextLayerDoubleTapped = { textLayer ->
             editingTextLayerId = textLayer.id
             currentTextColor = textLayer.colorArgb
             currentTextAlign = textLayer.align
 
-            val layoutText = binding.addTextLayout
-            layoutText.textInputOverlay.visibility = View.VISIBLE
-            layoutText.etOverlayText.setText(textLayer.content)
-            layoutText.etOverlayText.setSelection(textLayer.content.length)
-
-            // Căn lề tương ứng
-            layoutText.etOverlayText.gravity = when (textLayer.align) {
-                TextAlign.LEFT -> android.view.Gravity.START
-                TextAlign.CENTER -> android.view.Gravity.CENTER
-                TextAlign.RIGHT -> android.view.Gravity.END
-            }
-
-            layoutText.etOverlayText.requestFocus()
-            layoutText.etOverlayText.postDelayed({
-                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                imm.showSoftInput(layoutText.etOverlayText, InputMethodManager.SHOW_IMPLICIT)
-            }, 100)
+            showTextInputOverlay(textLayer.content, textLayer.align)
         }
+
+        // Lắng nghe Double Tap từ luồng cũ (DecorItemState)
+        binding.zoomableView.onTextDecorDoubleTapped = { decor ->
+            editingTextLayerId = decor.id
+            currentTextColor = decor.textColor ?: Color.WHITE
+            currentTextAlign = TextAlign.CENTER // Mặc định do luồng cũ vẽ chữ căn giữa
+
+            showTextInputOverlay(decor.textContent ?: "", TextAlign.CENTER)
+        }
+    }
+
+    // Tách phần hiển thị UI ra một hàm riêng để tái sử dụng
+    private fun showTextInputOverlay(text: String, align: TextAlign) {
+        val layoutText = binding.addTextLayout
+        layoutText.textInputOverlay.visibility = View.VISIBLE
+        layoutText.etOverlayText.setText(text)
+        layoutText.etOverlayText.setSelection(text.length)
+
+        layoutText.etOverlayText.gravity = when (align) {
+            TextAlign.LEFT -> Gravity.START
+            TextAlign.CENTER -> Gravity.CENTER
+            TextAlign.RIGHT -> Gravity.END
+        }
+
+        layoutText.etOverlayText.requestFocus()
+        layoutText.etOverlayText.postDelayed({
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.showSoftInput(layoutText.etOverlayText, InputMethodManager.SHOW_IMPLICIT)
+        }, 100)
     }
 
     private fun setupEditorTabMenu() {
@@ -440,5 +432,101 @@ class StickerEditActivity : AppCompatActivity() {
             Gravity.END, Gravity.RIGHT -> TextAlign.RIGHT
             else -> TextAlign.CENTER
         }
+    }
+    private fun setupBackPressHandler() {
+        // Chặn sự kiện nút Back vật lý / vuốt Back của điện thoại
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                showSaveConfirmationDialog()
+            }
+        })
+    }
+
+    private fun showSaveConfirmationDialog() {
+        // Tránh mở trùng Dialog nếu nó đang hiển thị sẵn trên màn hình
+        if (supportFragmentManager.findFragmentByTag(SaveConfirmDialogFragment.TAG) != null) {
+            return
+        }
+
+        SaveConfirmDialogFragment.newInstance()
+            .show(supportFragmentManager, SaveConfirmDialogFragment.TAG)
+    }
+
+    /**
+     * Đăng ký nhận kết quả từ SaveConfirmDialogFragment.
+     * GỌI HÀM NÀY TRONG onCreate() HOẶC onViewCreated().
+     */
+    private fun setupSaveConfirmDialogListener() {
+        supportFragmentManager.setFragmentResultListener(
+            SaveConfirmDialogFragment.REQUEST_KEY,
+            this // Nếu dùng trong Fragment thì thay 'this' bằng 'viewLifecycleOwner'
+        ) { _, bundle ->
+            when (bundle.getString(SaveConfirmDialogFragment.EXTRA_ACTION)) {
+                SaveConfirmDialogFragment.ACTION_SAVE -> {
+                    handleSaveProjectAction()
+                }
+                SaveConfirmDialogFragment.ACTION_DISCARD -> {
+                    handleDiscardChangesAction()
+                }
+                SaveConfirmDialogFragment.ACTION_CANCEL -> {
+                    // Người dùng chọn "Hủy" -> Tiếp tục ở lại chỉnh sửa
+                }
+            }
+        }
+    }
+
+    private fun syncBorderToEditViewModel() {
+        if (currentProjectId != null) {
+            val thickness = sharedViewModel.currentBorderThickness.value?.toFloat() ?: 30f
+            val distance = sharedViewModel.currentBorderDistance.value?.toFloat() ?: 20f
+            val color = sharedViewModel.currentBorderColor.value ?: Color.WHITE
+            editViewModel.updateBorder(thickness, distance, color)
+        }
+    }
+
+    private fun handleSaveProjectAction() {
+        val projectId = currentProjectId ?: "proj_${System.currentTimeMillis()}".also { currentProjectId = it }
+        captureThumbnailIfValid(projectId)
+
+        val baseBitmap = sharedViewModel.styleBitmaps[sharedViewModel.currentStyle.value ?: StickerStyle.ORIGINAL]
+        val finalBitmap = if (baseBitmap != null && binding.zoomableView.hasDecors()) {
+            binding.zoomableView.renderCompositeBitmap(baseBitmap)
+        } else {
+            baseBitmap ?: binding.zoomableView.captureToBitmap()
+        }
+
+        if (finalBitmap != null) {
+            sharedViewModel.saveCurrentSticker(finalBitmap)
+        }
+
+        val thickness = sharedViewModel.currentBorderThickness.value?.toFloat() ?: 30f
+        val distance = sharedViewModel.currentBorderDistance.value?.toFloat() ?: 20f
+        val color = sharedViewModel.currentBorderColor.value ?: Color.WHITE
+        val anim = sharedViewModel.currentAnimation.value ?: StickerAnimationType.NONE
+
+        editViewModel.saveProjectWithDetails(
+            projectId = projectId,
+            borderThickness = thickness,
+            borderDistance = distance,
+            borderColor = color,
+            animationType = anim
+        )
+    }
+
+    private fun captureThumbnailIfValid(projectId: String) {
+        val canvasView = binding.zoomableView
+        if (canvasView.width > 0 && canvasView.height > 0) {
+            runCatching {
+                val bitmap = canvasView.captureToBitmap()
+                editViewModel.captureAndSaveThumbnail(projectId, bitmap)
+            }.onFailure { e ->
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun handleDiscardChangesAction() {
+        isDiscardingChanges = true // Bật cờ để onStop() bỏ qua việc lưu thumbnail
+        finish() // Thoát ngay lập tức, trả lại trạng thái gốc
     }
 }

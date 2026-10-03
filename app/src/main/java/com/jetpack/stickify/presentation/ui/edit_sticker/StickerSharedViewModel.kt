@@ -19,6 +19,7 @@ import com.jetpack.stickify.domain.model.StickerAnimationType
 import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
 
 @HiltViewModel // Sử dụng Hilt để Inject
@@ -73,8 +74,8 @@ class StickerSharedViewModel @Inject constructor(
     private val _drawDecorModeEvent = MutableLiveData<DecorModel?>()
     val drawDecorModeEvent: LiveData<DecorModel?> get() = _drawDecorModeEvent
 
-    fun addDecor(resId: Int) {
-        val newDecor = DecorModel(resId = resId)
+    fun addDecor(resId: Int, id: String = UUID.randomUUID().toString()) {
+        val newDecor = DecorModel(id = id, resId = resId)
         val current = _decorList.value.orEmpty().toMutableList()
         current.add(newDecor)
         _decorList.value = current

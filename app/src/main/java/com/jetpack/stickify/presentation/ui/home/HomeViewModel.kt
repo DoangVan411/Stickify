@@ -35,15 +35,17 @@ class HomeViewModel @Inject constructor(
 
     private fun observeRecentProjects() {
         viewModelScope.launch {
-            // Đảm bảo dữ liệu mẫu ban đầu được khởi tạo nếu DB rỗng
+            // Đảm bảo dữ liệu mẫu ban đầu được khởi tạo từ Seeder nếu DB rỗng
             getRecentProjectsUseCase()
 
+            // Lắng nghe dữ liệu theo thời gian thực để đưa vào RecentProjectAdapter
             getRecentProjectsUseCase.getFlow()
                 .catch { e ->
-                    _uiState.update { it.copy(error = e.message) }
+                    _uiState.update { it.copy(error = e.message, isLoading = false) }
                 }
                 .collectLatest { projects ->
-                    _uiState.update { it.copy(recentProjects = projects) }
+                    // Thêm isLoading = false để ẩn ProgressBar trên HomeFragment
+                    _uiState.update { it.copy(recentProjects = projects, isLoading = false) }
                 }
         }
     }
@@ -64,14 +66,16 @@ class HomeViewModel @Inject constructor(
     fun onCategorySelected(category: ExploreCategory) {
         if (category == _uiState.value.selectedCategory) return
 
-        _uiState.update { it.copy(selectedCategory = category) }
+        // Bật lại trạng thái loading khi đổi tab Category
+        _uiState.update { it.copy(selectedCategory = category, isLoading = true) }
 
         viewModelScope.launch {
             val result = getExploreTemplatesUseCase(category)
             result.onSuccess { templates ->
-                _uiState.update { it.copy(exploreTemplates = templates) }
+                // Tắt loading sau khi load xong danh sách Template theo thể loại mới
+                _uiState.update { it.copy(exploreTemplates = templates, isLoading = false) }
             }.onFailure { error ->
-                _uiState.update { it.copy(error = error.message) }
+                _uiState.update { it.copy(error = error.message, isLoading = false) }
             }
         }
     }

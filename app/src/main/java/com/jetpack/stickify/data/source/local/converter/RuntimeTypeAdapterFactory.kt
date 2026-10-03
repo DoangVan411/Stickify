@@ -49,7 +49,7 @@ class RuntimeTypeAdapterFactory<T> private constructor(
     }
 
     override fun <R> create(gson: Gson, type: TypeToken<R>): TypeAdapter<R>? {
-        if (type.rawType != baseType) {
+        if (!baseType.isAssignableFrom(type.rawType)) {
             return null
         }
 

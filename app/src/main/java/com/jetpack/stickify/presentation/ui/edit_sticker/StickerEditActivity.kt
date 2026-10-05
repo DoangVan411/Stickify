@@ -252,6 +252,12 @@ class StickerEditActivity : AppCompatActivity() {
     }
 
     private fun switchFragment(tabName: String) {
+        // Tắt cọ vẽ trang trí khi người dùng chuyển sang tab khác
+        if (tabName != "Trang trí") {
+            binding.zoomableView.setDrawDecorBrush(null)
+            sharedViewModel.clearDrawDecor()
+        }
+
         val fragmentManager = supportFragmentManager
         val transaction = fragmentManager.beginTransaction()
 

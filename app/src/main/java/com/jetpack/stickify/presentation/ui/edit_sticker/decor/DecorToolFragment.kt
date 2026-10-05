@@ -71,7 +71,7 @@ class DecorToolFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // 1. Cài đặt Grid cho Vẽ trang trí (Có khung & nền xanh khi chọn)
+        // 1. Cài đặt Grid cho Vẽ trang trí
         val rvDrawnDecor: RecyclerView = view.findViewById(R.id.rvDrawnDecor)
         rvDrawnDecor.layoutManager = GridLayoutManager(requireContext(), 4)
         drawnAdapter = DecorAdapter(drawnDecorItems, isSelectable = true) { item ->

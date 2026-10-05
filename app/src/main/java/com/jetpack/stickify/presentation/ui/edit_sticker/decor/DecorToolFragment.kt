@@ -65,25 +65,36 @@ class DecorToolFragment : Fragment() {
         return inflater.inflate(R.layout.fragment_decor_tool, container, false)
     }
 
+    private var drawnAdapter: DecorAdapter? = null
+    private var labelAdapter: DecorAdapter? = null
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
         // 1. Cài đặt Grid cho Vẽ trang trí
         val rvDrawnDecor: RecyclerView = view.findViewById(R.id.rvDrawnDecor)
         rvDrawnDecor.layoutManager = GridLayoutManager(requireContext(), 4)
-        rvDrawnDecor.adapter = DecorAdapter(drawnDecorItems) { item ->
-            sharedViewModel.selectDrawDecor(item.resId)
+        drawnAdapter = DecorAdapter(drawnDecorItems, isSelectable = true) { item ->
+            if (drawnAdapter?.getSelectedPosition() != RecyclerView.NO_POSITION) {
+                sharedViewModel.selectDrawDecor(item.resId)
+            } else {
+                sharedViewModel.clearDrawDecor()
+            }
         }
+        rvDrawnDecor.adapter = drawnAdapter
 
         // 2. Cài đặt Grid cho Nhãn
         val rvLabels: RecyclerView = view.findViewById(R.id.rvLabels)
         rvLabels.layoutManager = GridLayoutManager(requireContext(), 4)
-        rvLabels.adapter = DecorAdapter(labelItems) { item ->
+        labelAdapter = DecorAdapter(labelItems, isSelectable = false) { item ->
+            drawnAdapter?.clearSelection()
+            sharedViewModel.clearDrawDecor()
             if (item.isImportAction) {
                 pickImageLauncher.launch("image/*")
             } else {
                 sharedViewModel.addDecor(item.resId)
             }
         }
+        rvLabels.adapter = labelAdapter
     }
 }

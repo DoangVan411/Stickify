@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/decorContainer"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:clickable="true"
@@ -7,12 +8,20 @@
     android:foreground="?attr/selectableItemBackgroundBorderless"
     android:padding="4dp">
 
+    <View
+        android:id="@+id/selectedIndicator"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:background="@drawable/bg_decor_selected"
+        android:visibility="gone" />
+
     <ImageView
         android:id="@+id/ivDecorGridThumb"
         android:layout_width="match_parent"
         android:layout_height="64dp"
         android:adjustViewBounds="true"
-        android:padding="2dp"
+        android:padding="6dp"
         android:scaleType="fitCenter" />
 
 </FrameLayout>
+

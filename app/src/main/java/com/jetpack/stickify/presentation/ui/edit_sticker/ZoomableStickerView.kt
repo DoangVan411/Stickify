@@ -100,10 +100,14 @@ class ZoomableStickerView @JvmOverloads constructor(
     private var isDraggingDecor = false
 
     private val decorPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val decorFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#151B85F3")
+        style = Paint.Style.FILL
+    }
     private val decorBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#7A7A7A")
+        color = Color.parseColor("#1B85F3")
         style = Paint.Style.STROKE
-        strokeWidth = 1.5f * resources.displayMetrics.density
+        strokeWidth = 2f * resources.displayMetrics.density
     }
     private val actionPillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
@@ -117,8 +121,13 @@ class ZoomableStickerView @JvmOverloads constructor(
 
     // 4 corner handle paints
     private val handleFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#7A7A7A")
+        color = Color.parseColor("#1B85F3")
         style = Paint.Style.FILL
+    }
+    private val handleStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        style = Paint.Style.STROKE
+        strokeWidth = 1.5f * resources.displayMetrics.density
     }
     private val handleRadius = 6f * resources.displayMetrics.density
     private val handleTouchRadius = 28f * resources.displayMetrics.density
@@ -149,13 +158,26 @@ class ZoomableStickerView @JvmOverloads constructor(
 
     fun hasDecors(): Boolean = decorItems.isNotEmpty()
 
+    private fun getBaseCanvasWidth(): Float {
+        return currentBitmap?.width?.toFloat()
+            ?: projectContent?.canvas?.width?.toFloat()?.takeIf { it > 0f }
+            ?: 512f
+    }
+
+    private fun getBaseCanvasHeight(): Float {
+        return currentBitmap?.height?.toFloat()
+            ?: projectContent?.canvas?.height?.toFloat()?.takeIf { it > 0f }
+            ?: 512f
+    }
+
     fun addDecorBitmap(bitmap: Bitmap, id: String = java.util.UUID.randomUUID().toString()) {
-        val curr = currentBitmap ?: return
+        val baseWidth = getBaseCanvasWidth()
+        val baseHeight = getBaseCanvasHeight()
         val decor = createDecorState(
             id = id,
             bitmap = bitmap,
-            x = curr.width / 2f,
-            y = curr.height / 2f,
+            x = baseWidth / 2f,
+            y = baseHeight / 2f,
             widthRatio = 0.45f
         )
         decorItems.add(decor)
@@ -420,33 +442,33 @@ class ZoomableStickerView @JvmOverloads constructor(
             bitmapPaintCurrent.alpha = (crossfadeProgress * 255).toInt().coerceAtLeast(if (prev == null) 255 else 0)
             canvas.drawBitmap(curr, displayMatrix, bitmapPaintCurrent)
 
-            // 4. Vẽ các vật phẩm Decor
-            val currentScale = currentMatrixScale()
-            val density = resources.displayMetrics.density
-
-            for (decor in decorItems) {
-                val pts = floatArrayOf(decor.x, decor.y)
-                displayMatrix.mapPoints(pts)
-                val screenX = pts[0]
-                val screenY = pts[1]
-                val screenW = decor.width * decor.scale * currentScale
-                val screenH = decor.height * decor.scale * currentScale
-
-                canvas.save()
-                canvas.translate(screenX, screenY)
-                canvas.rotate(decor.rotation)
-
-                val rect = RectF(-screenW / 2f, -screenH / 2f, screenW / 2f, screenH / 2f)
-                canvas.drawBitmap(decor.bitmap, null, rect, decorPaint)
-                canvas.restore()
-
-                if (decor == selectedDecor) {
-                    drawSelectedDecorOverlay(canvas, decor, currentScale, density)
-                }
-            }
-
             if (hasAnim) {
                 canvas.restore()
+            }
+        }
+
+        // 4. Vẽ các vật phẩm Decor (hoạt động cho cả ProjectContent lẫn Single Bitmap)
+        val currentScale = currentMatrixScale()
+        val density = resources.displayMetrics.density
+
+        for (decor in decorItems) {
+            val pts = floatArrayOf(decor.x, decor.y)
+            displayMatrix.mapPoints(pts)
+            val screenX = pts[0]
+            val screenY = pts[1]
+            val screenW = decor.width * decor.scale * currentScale
+            val screenH = decor.height * decor.scale * currentScale
+
+            canvas.save()
+            canvas.translate(screenX, screenY)
+            canvas.rotate(decor.rotation)
+
+            val rect = RectF(-screenW / 2f, -screenH / 2f, screenW / 2f, screenH / 2f)
+            canvas.drawBitmap(decor.bitmap, null, rect, decorPaint)
+            canvas.restore()
+
+            if (decor == selectedDecor) {
+                drawSelectedDecorOverlay(canvas, decor, currentScale, density)
             }
         }
     }
@@ -560,10 +582,12 @@ class ZoomableStickerView @JvmOverloads constructor(
             lineTo(corners[2][0], corners[2][1])
             close()
         }
+        canvas.drawPath(borderPath, decorFillPaint)
         canvas.drawPath(borderPath, decorBorderPaint)
 
         for (corner in corners) {
             canvas.drawCircle(corner[0], corner[1], handleRadius, handleFillPaint)
+            canvas.drawCircle(corner[0], corner[1], handleRadius, handleStrokePaint)
         }
 
         val actionLayout = buildActionPillLayout(corners, density)
@@ -728,8 +752,8 @@ class ZoomableStickerView @JvmOverloads constructor(
         widthRatio: Float,
         isEditable: Boolean = true
     ): DecorItemState {
-        val curr = currentBitmap ?: error("Current bitmap must exist before adding decor")
-        val targetWidth = curr.width * widthRatio
+        val baseWidth = getBaseCanvasWidth()
+        val targetWidth = baseWidth * widthRatio
         val aspect = (bitmap.width.toFloat() / bitmap.height.toFloat().coerceAtLeast(1f)).coerceAtLeast(0.01f)
         val targetHeight = targetWidth / aspect
         return DecorItemState(
@@ -775,7 +799,7 @@ class ZoomableStickerView @JvmOverloads constructor(
     private fun maybeAddDrawDecorAt(screenX: Float, screenY: Float) {
         val brush = drawDecorBrush ?: return
         val point = screenToCanvasPoint(screenX, screenY) ?: return
-        val spacing = (currentBitmap?.width ?: 0) * brush.widthRatio * 0.8f
+        val spacing = (getBaseCanvasWidth() * brush.widthRatio * 0.5f).coerceAtLeast(15f)
         val dx = point.x - lastDrawCanvasX
         val dy = point.y - lastDrawCanvasY
         if (dx * dx + dy * dy >= spacing * spacing) {
@@ -804,16 +828,17 @@ class ZoomableStickerView @JvmOverloads constructor(
 
     // ---------- Touch: pinch zoom + pan + decor rotate/scale + handle ----------
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        // Chỉ dùng ScaleGestureDetector khi KHÔNG thao tác trên decor
-        if (!isDraggingDecor && !isDraggingHandle) {
+        // Chỉ dùng ScaleGestureDetector khi KHÔNG thao tác trên decor và KHÔNG ở chế độ vẽ brush
+        if (!isDraggingDecor && !isDraggingHandle && drawDecorBrush == null) {
             scaleGestureDetector.onTouchEvent(event)
         }
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                if (drawDecorBrush != null && currentBitmap != null) {
+                if (drawDecorBrush != null) {
                     currentDrawStrokeIds = mutableListOf()
-                    isDrawingDecorStroke = addDrawDecorAt(event.x, event.y)
+                    isDrawingDecorStroke = true
+                    addDrawDecorAt(event.x, event.y)
                     isPanning = false
                     return true
                 }
@@ -897,7 +922,7 @@ class ZoomableStickerView @JvmOverloads constructor(
                 }
             }
             MotionEvent.ACTION_MOVE -> {
-                if (isDrawingDecorStroke) {
+                if (drawDecorBrush != null) {
                     maybeAddDrawDecorAt(event.x, event.y)
                     return true
                 }

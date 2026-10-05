@@ -93,7 +93,11 @@ class StickerSharedViewModel @Inject constructor(
     }
 
     fun selectDrawDecor(resId: Int) {
-        _drawDecorModeEvent.value = DecorModel(resId = resId)
+        _drawDecorModeEvent.value = if (resId != 0) DecorModel(resId = resId) else null
+    }
+
+    fun clearDrawDecor() {
+        _drawDecorModeEvent.value = null
     }
 
     fun loadAndPrepareStyles(uriString: String) {

@@ -3,18 +3,23 @@ package com.jetpack.stickify.presentation.ui.edit_sticker
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.ActivityStickerEditBinding
+import com.jetpack.stickify.domain.model.StickerStyle
 import com.jetpack.stickify.presentation.ui.edit_sticker.border.BorderToolFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.custom_view.EditorPanelView
 import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorToolFragment
@@ -23,21 +28,12 @@ import com.jetpack.stickify.presentation.ui.edit_sticker.effect.EffectToolFragme
 import com.jetpack.stickify.presentation.ui.edit_sticker.suggestion.SuggestionFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextToolFragment
 import com.jetpack.stickify.domain.model.StickerStyle
-import com.jetpack.stickify.domain.model.StickerAnimationType
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
-import android.graphics.Typeface
 import android.view.Gravity
-import android.view.inputmethod.InputMethodManager
-import android.widget.EditText
 import com.jetpack.stickify.domain.model.TextAlign
-import com.jetpack.stickify.domain.model.BorderStyle
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
-import androidx.activity.OnBackPressedCallback // Nhớ thêm import này
-import com.jetpack.stickify.domain.model.SubjectLayer
-import com.jetpack.stickify.presentation.ui.edit_sticker.cancel.SaveConfirmDialogFragment
 
 /**
  * Màn hình "Chỉnh sửa" sticker:
@@ -214,7 +210,9 @@ class StickerEditActivity : AppCompatActivity() {
             if (decor == null) {
                 binding.zoomableView.setDrawDecorBrush(null)
             } else {
-                val bitmap = decor.customBitmap ?: BitmapFactory.decodeResource(resources, decor.resId)
+                val bitmap = decor.customBitmap ?: runCatching {
+                    BitmapFactory.decodeResource(resources, decor.resId)
+                }.getOrNull() ?: ContextCompat.getDrawable(this, decor.resId)?.toBitmap()
                 binding.zoomableView.setDrawDecorBrush(bitmap, decor.id)
             }
         }
@@ -448,6 +446,12 @@ class StickerEditActivity : AppCompatActivity() {
     }
 
     private fun switchFragment(tabName: String) {
+        // Tắt cọ vẽ trang trí khi người dùng chuyển sang tab khác
+        if (tabName != "Trang trí") {
+            binding.zoomableView.setDrawDecorBrush(null)
+            sharedViewModel.clearDrawDecor()
+        }
+
         val fragmentManager = supportFragmentManager
         val transaction = fragmentManager.beginTransaction()
 

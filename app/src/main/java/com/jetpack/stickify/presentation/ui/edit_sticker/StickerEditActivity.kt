@@ -35,6 +35,9 @@ import com.jetpack.stickify.domain.model.BorderStyle
 import com.jetpack.stickify.domain.model.StickerAnimationType
 import com.jetpack.stickify.domain.model.SubjectLayer
 import com.jetpack.stickify.domain.model.TextAlign
+import com.jetpack.stickify.domain.model.TextLayer
+import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextInputOverlayController
+import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextStyleSpec
 import com.jetpack.stickify.presentation.ui.edit_sticker.cancel.SaveConfirmDialogFragment
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -71,10 +74,8 @@ class StickerEditActivity : AppCompatActivity() {
 
     private var currentProjectId: String? = null
 
-    // Thêm biến state để lưu trạng thái chữ hiện tại
-    private var currentTextAlign: TextAlign = TextAlign.CENTER
-    private var currentTextColor = Color.WHITE
-    private var editingTextLayerId: String? = null
+    // Toàn bộ UI + trạng thái nhập chữ (màu, font, nền, căn lề) nằm trong controller riêng
+    private lateinit var textController: TextInputOverlayController
 
     private var previousTabIndex = 0
 
@@ -99,8 +100,8 @@ class StickerEditActivity : AppCompatActivity() {
 
         setupClickListeners()
         setupObservers()
+        setupTextOverlayLogic() // phải khởi tạo trước tab menu (tab "Chữ" dùng textController)
         setupEditorTabMenu()
-        setupTextOverlayLogic()
         setupBackPressHandler() //  Đăng ký Back stack
         setupSaveConfirmDialogListener()// setup comfirm
 
@@ -157,10 +158,29 @@ class StickerEditActivity : AppCompatActivity() {
         finish()
     }
 
+    // 2 nguồn loading (shared: xử lý ảnh/viền, edit: load/lưu project) dùng chung 1 progress bar,
+    // nếu mỗi nơi tự set thì nguồn này sẽ tắt progress của nguồn kia.
+    private var sharedLoading = false
+    private var editLoading = false
+
+    private fun refreshProgress() {
+        binding.progressBar.visibility = if (sharedLoading || editLoading) View.VISIBLE else View.GONE
+    }
+
+    /** Đẩy bitmap của style đang chọn (gốc/viền/cartoon) vào layer chủ thể. */
+    private fun applySubjectStyleBitmap() {
+        val style = sharedViewModel.currentStyle.value ?: return
+        val bitmap = sharedViewModel.styleBitmaps[style] ?: return
+        val subjectLayerId = editViewModel.uiState.value.editorSession.content.layers
+            .find { it is SubjectLayer }?.id ?: return
+        binding.zoomableView.preloadLayerBitmap(subjectLayerId, bitmap)
+    }
+
     private fun setupObservers() {
         // Observers cho SharedViewModel
         sharedViewModel.isLoading.observe(this) { isLoading ->
-            binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
+            sharedLoading = isLoading == true
+            refreshProgress()
         }
 
         sharedViewModel.currentStyle.observe(this) { style ->
@@ -168,11 +188,7 @@ class StickerEditActivity : AppCompatActivity() {
             if (bitmap != null) {
                 if (isProjectMode) {
                     // Cập nhật ảnh Preview trực tiếp vào SubjectLayer thay vì ghi đè toàn bộ View
-                    val subjectLayerId = editViewModel.uiState.value.editorSession.content.layers
-                        .find { it is SubjectLayer }?.id
-                    if (subjectLayerId != null) {
-                        binding.zoomableView.preloadLayerBitmap(subjectLayerId, bitmap)
-                    }
+                    applySubjectStyleBitmap()
                 } else {
                     binding.zoomableView.setBitmap(bitmap, animate = true)
                 }
@@ -180,7 +196,8 @@ class StickerEditActivity : AppCompatActivity() {
         }
 
         sharedViewModel.historyState.observe(this) { (canUndo, canRedo) ->
-            updateUndoRedoButtons(canUndo, canRedo)
+            // Project dùng lịch sử của editViewModel; không để lịch sử style của shared ghi đè trạng thái nút
+            if (!isProjectMode) updateUndoRedoButtons(canUndo, canRedo)
         }
 
         sharedViewModel.saveSuccessEvent.observe(this) { savedUriString ->
@@ -242,7 +259,8 @@ class StickerEditActivity : AppCompatActivity() {
                     }
 
                     if (isProjectMode) {
-                        binding.progressBar.visibility = if (state.isLoading) View.VISIBLE else View.GONE
+                        editLoading = state.isLoading
+                        refreshProgress()
                         updateUndoRedoButtons(state.canUndo, state.canRedo)
                         // BƯỚC BỊ THIẾU trước đây: đẩy nội dung project (các layer) vào view để vẽ.
                         if (!state.isLoading) {
@@ -250,6 +268,8 @@ class StickerEditActivity : AppCompatActivity() {
                                 state.editorSession.content,
                                 editViewModel.assetLoader
                             )
+                            // Layer chủ thể có thể xuất hiện SAU khi style đã sẵn sàng (project mới copy ảnh bất đồng bộ)
+                            applySubjectStyleBitmap()
                         }
                     }
 
@@ -316,71 +336,29 @@ class StickerEditActivity : AppCompatActivity() {
     }
 
     private fun setupTextOverlayLogic() {
-        val layoutText = binding.addTextLayout
-
-        setupDoubleTapToEditText()
-
-        // 1. Logic hoàn tất khi BẤM RA NGOÀI nền đen (textInputOverlay)
-        layoutText.textInputOverlay.setOnClickListener {
-            val input = layoutText.etOverlayText.text.toString().trim()
-
-            if (input.isNotEmpty()) {
-                if (isProjectMode) {
-                    // Project: chữ là TextLayer (có Undo/Redo, được lưu vào DB)
-                    val id = editingTextLayerId
-                    if (id != null) {
-                        editViewModel.updateTextLayer(id, input, currentTextColor, currentTextAlign)
-                    } else {
-                        editViewModel.addTextLayer(input, currentTextColor, currentTextAlign)
-                    }
-                } else {
-                    // Luồng mới: chữ là decor trong view, sẽ được "nướng" vào ảnh khi lưu.
-                    // (Trước đây gọi cả 2 -> chữ bị nhân đôi.)
-                    binding.zoomableView.addTextItem(
-                        text = input,
-                        textColor = currentTextColor,
-                        existingId = editingTextLayerId
-                    )
-                }
-            }
-
-            layoutText.textInputOverlay.visibility = View.GONE
-            layoutText.etOverlayText.clearFocus()
-            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-            imm.hideSoftInputFromWindow(layoutText.etOverlayText.windowToken, 0)
-
+        textController = TextInputOverlayController(binding.addTextLayout) { result ->
+            if (result != null) applyTextResult(result)
+            // Đóng màn hình nhập chữ -> quay lại tab trước đó
             binding.editorPanel.selectTab(previousTabIndex)
-            editingTextLayerId = null // Reset ID sau khi lưu xong
         }
+        setupDoubleTapToEditText()
+    }
 
-        // 2. Chặn sự kiện click thủng (Nếu bấm vào EditText hoặc ScrollView thì không bị tắt)
-        layoutText.etOverlayText.setOnClickListener { /* Consume click */ }
-        layoutText.fontScrollView.setOnClickListener { /* Consume click */ }
-        layoutText.llTextTopTools.setOnClickListener { /* Consume click */ }
-
-        // 3. Xử lý Căn lề (Xoay vòng: Giữa -> Trái -> Phải -> Giữa...)
-        layoutText.btnTextAlign.setOnClickListener {
-            val nextGravity = when (layoutText.etOverlayText.gravity and Gravity.HORIZONTAL_GRAVITY_MASK) {
-                Gravity.CENTER_HORIZONTAL -> Gravity.START
-                Gravity.START, Gravity.LEFT -> Gravity.END
-                else -> Gravity.CENTER_HORIZONTAL
+    private fun applyTextResult(result: TextInputOverlayController.TextEditResult) {
+        if (isProjectMode) {
+            // Project: chữ là TextLayer (có Undo/Redo, được lưu vào DB, kèm font + nền/viền)
+            val id = result.layerId
+            if (id != null) {
+                editViewModel.updateTextLayer(id, result.text, result.colorArgb, result.align, result.style)
+            } else {
+                editViewModel.addTextLayer(result.text, result.colorArgb, result.align, result.style)
             }
-
-            layoutText.etOverlayText.gravity = nextGravity
-
-            // Dùng hàm extension .toTextAlign() để chuyển đổi an toàn sang Domain model
-            currentTextAlign = nextGravity.toTextAlign()
-        }
-
-        // 4. Xử lý đổi Font chữ
-        layoutText.fontDefault.setOnClickListener {
-            layoutText.etOverlayText.typeface = Typeface.DEFAULT
-        }
-        layoutText.fontTypewriter.setOnClickListener {
-            layoutText.etOverlayText.typeface = Typeface.MONOSPACE
-        }
-        layoutText.fontBold.setOnClickListener {
-            layoutText.etOverlayText.typeface = Typeface.DEFAULT_BOLD
+        } else {
+            binding.zoomableView.addTextItem(
+                text = result.text,
+                textColor = result.colorArgb,
+                existingId = result.layerId
+            )
         }
     }
 
@@ -399,38 +377,21 @@ class StickerEditActivity : AppCompatActivity() {
             if (isProjectMode) editViewModel.addStampLayers(this, bitmap, stamps)
         }
 
-        // Double tap vào chữ (ở cả 2 chế độ chữ đều là decor có textContent trong view)
+        // Double tap vào chữ -> mở lại màn hình nhập chữ với đúng màu / căn lề / font / nền của chữ đó
         binding.zoomableView.onTextDecorDoubleTapped = { decor ->
-            editingTextLayerId = decor.id
             val layer = if (isProjectMode) {
                 editViewModel.uiState.value.editorSession.content.layers
-                    .find { it.id == decor.id } as? com.jetpack.stickify.domain.model.TextLayer
+                    .find { it.id == decor.id } as? TextLayer
             } else null
-            currentTextColor = layer?.colorArgb ?: decor.textColor ?: Color.WHITE
-            currentTextAlign = layer?.align ?: TextAlign.CENTER
 
-            showTextInputOverlay(layer?.content ?: decor.textContent ?: "", currentTextAlign)
+            textController.showEdit(
+                layerId = decor.id,
+                text = layer?.content ?: decor.textContent ?: "",
+                colorArgb = layer?.colorArgb ?: decor.textColor ?: Color.WHITE,
+                align = layer?.align ?: TextAlign.CENTER,
+                style = TextStyleSpec.decode(layer?.fontId)
+            )
         }
-    }
-
-    // Tách phần hiển thị UI ra một hàm riêng để tái sử dụng
-    private fun showTextInputOverlay(text: String, align: TextAlign) {
-        val layoutText = binding.addTextLayout
-        layoutText.textInputOverlay.visibility = View.VISIBLE
-        layoutText.etOverlayText.setText(text)
-        layoutText.etOverlayText.setSelection(text.length)
-
-        layoutText.etOverlayText.gravity = when (align) {
-            TextAlign.LEFT -> Gravity.START
-            TextAlign.CENTER -> Gravity.CENTER
-            TextAlign.RIGHT -> Gravity.END
-        }
-
-        layoutText.etOverlayText.requestFocus()
-        layoutText.etOverlayText.postDelayed({
-            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-            imm.showSoftInput(layoutText.etOverlayText, InputMethodManager.SHOW_IMPLICIT)
-        }, 100)
     }
 
     private fun setupEditorTabMenu() {
@@ -474,20 +435,7 @@ class StickerEditActivity : AppCompatActivity() {
                     transaction.show(suggestionFragment!!)
                 }
             }
-            "Chữ" -> {
-                editingTextLayerId = null // Tạo mới hoàn toàn -> Reset ID
-                currentTextAlign = TextAlign.CENTER // Mặc định căn giữa
-                binding.addTextLayout.etOverlayText.gravity = Gravity.CENTER
-
-                binding.addTextLayout.textInputOverlay.visibility = View.VISIBLE
-                binding.addTextLayout.etOverlayText.setText("")
-                binding.addTextLayout.etOverlayText.requestFocus()
-
-                binding.addTextLayout.etOverlayText.postDelayed({
-                    val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                    imm.showSoftInput(binding.addTextLayout.etOverlayText, InputMethodManager.SHOW_IMPLICIT)
-                }, 100)
-            }
+            "Chữ" -> textController.showNew()
             "Hiệu ứng" -> {
                 if (effectToolFragment == null) {
                     effectToolFragment = EffectToolFragment()
@@ -519,26 +467,15 @@ class StickerEditActivity : AppCompatActivity() {
         transaction.commit()
     }
 
-    private fun TextAlign.toGravity(): Int {
-        return when (this) {
-            TextAlign.LEFT -> Gravity.START
-            TextAlign.CENTER -> Gravity.CENTER
-            TextAlign.RIGHT -> Gravity.END
-        }
-    }
-
-    private fun Int.toTextAlign(): TextAlign {
-        return when (this) {
-            Gravity.START, Gravity.LEFT -> TextAlign.LEFT
-            Gravity.END, Gravity.RIGHT -> TextAlign.RIGHT
-            else -> TextAlign.CENTER
-        }
-    }
     private fun setupBackPressHandler() {
         // Chặn sự kiện nút Back vật lý / vuốt Back của điện thoại
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                showSaveConfirmationDialog()
+                if (::textController.isInitialized && textController.isShowing) {
+                    textController.commit()
+                } else {
+                    showSaveConfirmationDialog()
+                }
             }
         })
     }

@@ -1,5 +1,7 @@
 package com.jetpack.stickify.presentation.ui.edit_sticker
 
+import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextStyleRenderer
+import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextStyleSpec
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Bitmap
@@ -34,6 +36,7 @@ class ZoomableStickerView @JvmOverloads constructor(
         private const val MAX_SCALE = 10f
         private const val CROSSFADE_DURATION_MS = 260L
         private const val CHECKER_TILE_DP = 12f
+        private const val PRELOADED_KEY = "__preloaded__"
     }
 
 
@@ -138,6 +141,7 @@ class ZoomableStickerView @JvmOverloads constructor(
     private var isDraggingDecor = false
 
     private val decorPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val overlayPath = Path()
     private val decorFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#151B85F3")
         style = Paint.Style.FILL
@@ -333,6 +337,9 @@ class ZoomableStickerView @JvmOverloads constructor(
                 else -> null
             }
             if (asset == null) return@mapNotNull null
+            if (layerSourceKeys[layer.id] == PRELOADED_KEY && layerBitmaps[layer.id]?.isRecycled == false) {
+                return@mapNotNull null
+            }
             val key = assetKey(asset)
             val cached = layerBitmaps[layer.id]
             if (layerSourceKeys[layer.id] == key && cached != null && !cached.isRecycled) null
@@ -388,8 +395,12 @@ class ZoomableStickerView @JvmOverloads constructor(
 
     /** Đăng ký trước bitmap cho 1 layer sắp được thêm (để hiển thị ngay, không phải chờ đọc file). */
     fun preloadLayerBitmap(layerId: String, bitmap: Bitmap) {
+        // Gọi lặp lại với cùng bitmap (mỗi lần state đổi) thì bỏ qua, tránh dựng lại item + vẽ lại vô ích
+        if (layerBitmaps[layerId] === bitmap && layerSourceKeys[layerId] == PRELOADED_KEY) return
         preloadedIds.add(layerId)
         layerBitmaps[layerId] = bitmap
+        // Đánh dấu: bitmap này do bên ngoài cấp (ảnh đã viền/cartoon...), loader KHÔNG được đọc file đè lên
+        layerSourceKeys[layerId] = PRELOADED_KEY
         projectContent?.let { syncLayerItems(it) } // Đồng bộ lại kích thước lập tức
         invalidate()
     }
@@ -408,35 +419,18 @@ class ZoomableStickerView @JvmOverloads constructor(
         pendingSelectId = null
     }
 
-    private fun buildTextLayerBitmap(layer: TextLayer): Bitmap {
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = layer.colorArgb
-            textSize = 120f
-            typeface = Typeface.DEFAULT_BOLD
-            textSkewX = if (layer.italic) -0.25f else 0f
-        }
-        val lines = layer.content.split("\n")
-        val lineHeight = paint.descent() - paint.ascent()
-        val maxWidth = lines.maxOf { paint.measureText(it) }
-        val padding = 40
-        val bmp = Bitmap.createBitmap(
-            (maxWidth + padding * 2).toInt().coerceAtLeast(1),
-            (lineHeight * lines.size + padding * 2).toInt().coerceAtLeast(1),
-            Bitmap.Config.ARGB_8888
+    /**
+     * Chữ + nền/viền được vẽ bởi TextStyleRenderer, cùng quy tắc với etOverlayText
+     * nên trên canvas trông giống hệt màn hình nhập chữ.
+     */
+    private fun buildTextLayerBitmap(layer: TextLayer): Bitmap =
+        TextStyleRenderer.render(
+            text = layer.content,
+            colorArgb = layer.colorArgb,
+            align = layer.align,
+            style = TextStyleSpec.decode(layer.fontId),
+            italic = layer.italic
         )
-        val c = Canvas(bmp)
-        var y = padding - paint.ascent()
-        val factor = when (layer.align) {
-            TextAlign.LEFT -> 0f
-            TextAlign.CENTER -> 0.5f
-            TextAlign.RIGHT -> 1f
-        }
-        for (line in lines) {
-            c.drawText(line, padding + (maxWidth - paint.measureText(line)) * factor, y, paint)
-            y += lineHeight
-        }
-        return bmp
-    }
 
     /**
      * Đồng bộ các layer Decoration/Text của project thành decorItems để dùng lại toàn bộ
@@ -445,7 +439,7 @@ class ZoomableStickerView @JvmOverloads constructor(
      */
     private fun syncLayerItems(content: ProjectContent) {
         // Đang kéo layer thì không dựng lại, tránh giật/đứt cử chỉ
-        if (isDraggingDecor || isDraggingHandle) return
+        if (isDraggingDecor || isDraggingHandle || isDrawingDecorStroke) return
 
         val prevSelectedId = pendingSelectId ?: selectedDecor?.id
         val cw = content.canvas.width.toFloat().takeIf { it > 0f } ?: 512f
@@ -461,7 +455,7 @@ class ZoomableStickerView @JvmOverloads constructor(
                 items.add(DecorItemState(layer.id, bmp, tf.cx, tf.cy, w, h, tf.scale, tf.rotationDeg))
             } else if (layer is TextLayer) {
                 if (layer.content.isBlank()) continue
-                val key = "${layer.content}|${layer.colorArgb}|${layer.align}|${layer.italic}"
+                val key = "${layer.content}|${layer.colorArgb}|${layer.align}|${layer.italic}|${layer.fontId}"
                 val cached = textBitmapCache[layer.id]
                 val bmp = if (cached != null && cached.first == key) cached.second
                 else buildTextLayerBitmap(layer).also { textBitmapCache[layer.id] = key to it }
@@ -586,6 +580,11 @@ class ZoomableStickerView @JvmOverloads constructor(
         }
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (!viewScope.isActive) viewScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    }
+
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         crossfadeAnimator?.cancel()
@@ -601,13 +600,41 @@ class ZoomableStickerView @JvmOverloads constructor(
         // 2. Nếu có projectContent (Multi-layer mode từ Room DB)
         val content = projectContent
         if (content != null) {
+            // Preview hiệu ứng: toàn bộ nội dung (chủ thể + decor + chữ) chuyển động quanh tâm canvas,
+            // đúng như ảnh GIF sẽ được xuất ra. Trước đây nhánh project bỏ qua bước này nên chọn effect
+            // không thấy gì thay đổi.
+            val hasAnim = currentAnimationType.isAnimated
+            if (hasAnim) {
+                val cw = getBaseCanvasWidth()
+                val ch = getBaseCanvasHeight()
+                val pts = floatArrayOf(cw / 2f, ch / 2f)
+                displayMatrix.mapPoints(pts)
+                val tf = com.jetpack.stickify.data.gif.StickerAnimationRenderer
+                    .getFrameTransform(currentAnimationType, animFrameIndex)
+                val sc = currentMatrixScale()
+                // tf: [translateX (tỉ lệ theo w), translateY (tỉ lệ theo h), scaleX, scaleY, rotation]
+                canvas.save()
+                canvas.translate(pts[0] + tf[0] * cw * sc, pts[1] + tf[1] * ch * sc)
+                canvas.rotate(tf[4])
+                canvas.scale(tf[2], tf[3])
+                canvas.translate(-pts[0], -pts[1])
+            }
+
             canvas.save()
             canvas.concat(displayMatrix)
             for (layer in content.layers) {
                 if (!layer.visible) continue
+                // Chủ thể / decor / chữ được vẽ qua decorItems: bám theo ngón tay theo thời gian thực
+                // và có khung chọn + handle. Vẽ thêm ở đây sẽ bị trùng và đứng im đến khi thả tay.
+                if (layer is SubjectLayer || layer is DecorationLayer || layer is TextLayer) continue
                 drawLayer(canvas, layer)
             }
             canvas.restore()
+            drawDecorItems(canvas,false)
+            if (hasAnim) canvas.restore()
+
+            // Khung chọn vẽ NGOÀI phần chuyển động để luôn khớp với vùng chạm thực tế
+            drawSelectionOverlay(canvas)
         } else {
             // 3. Single bitmap preview mode (Legacy Cutout / SharedViewModel)
             val curr = currentBitmap ?: return
@@ -655,6 +682,13 @@ class ZoomableStickerView @JvmOverloads constructor(
             }
         }
     }
+    /** Khung chọn + handle luôn nằm trên cùng, không bị item vẽ sau che mất. */
+    private fun drawSelectionOverlay(canvas: Canvas) {
+        val sel = selectedDecor ?: return
+        if (!decorItems.contains(sel)) return
+        drawSelectedDecorOverlay(canvas, sel, currentMatrixScale(), resources.displayMetrics.density)
+    }
+
 
     /**
      * Tỉ lệ nền để ảnh nằm vừa trong canvas project (512x512):
@@ -674,7 +708,7 @@ class ZoomableStickerView @JvmOverloads constructor(
     }
 
     /** Vẽ decorItems (và khung chọn) ở hệ tọa độ màn hình, dùng chung cho cả 2 chế độ. */
-    private fun drawDecorItems(canvas: Canvas) {
+    private fun drawDecorItems(canvas: Canvas, drawOverlay: Boolean = true) {
         val currentScale = currentMatrixScale()
         val density = resources.displayMetrics.density
         for (decor in decorItems) {
@@ -689,11 +723,8 @@ class ZoomableStickerView @JvmOverloads constructor(
             val rect = RectF(-screenW / 2f, -screenH / 2f, screenW / 2f, screenH / 2f)
             canvas.drawBitmap(decor.bitmap, null, rect, decorPaint)
             canvas.restore()
-
-            if (decor == selectedDecor) {
-                drawSelectedDecorOverlay(canvas, decor, currentScale, density)
-            }
         }
+        if (drawOverlay) drawSelectionOverlay(canvas)
     }
 
     private fun drawLayer(canvas: Canvas, layer: Layer) {
@@ -790,13 +821,13 @@ class ZoomableStickerView @JvmOverloads constructor(
         val corners = getDecorCornersInScreen(decor, matrixScale)
         if (corners.size != 4) return
 
-        val borderPath = Path().apply {
-            moveTo(corners[0][0], corners[0][1])
-            lineTo(corners[1][0], corners[1][1])
-            lineTo(corners[3][0], corners[3][1])
-            lineTo(corners[2][0], corners[2][1])
-            close()
-        }
+        val borderPath = overlayPath
+        borderPath.rewind()
+        borderPath.moveTo(corners[0][0], corners[0][1])
+        borderPath.lineTo(corners[1][0], corners[1][1])
+        borderPath.lineTo(corners[3][0], corners[3][1])
+        borderPath.lineTo(corners[2][0], corners[2][1])
+        borderPath.close()
         canvas.drawPath(borderPath, decorFillPaint)
         canvas.drawPath(borderPath, decorBorderPaint)
 
@@ -884,6 +915,7 @@ class ZoomableStickerView @JvmOverloads constructor(
     }
 
     private fun getDecorActionAt(decor: DecorItemState, touchX: Float, touchY: Float): DecorAction? {
+        if (decor.isSubject) return null // overlay không vẽ pill cho chủ thể -> cũng không được bắt chạm
         val corners = getDecorCornersInScreen(decor, currentMatrixScale())
         val layout = buildActionPillLayout(corners, resources.displayMetrics.density)
         return when {
@@ -968,8 +1000,7 @@ class ZoomableStickerView @JvmOverloads constructor(
         widthRatio: Float,
         isEditable: Boolean = true
     ): DecorItemState {
-        val curr = currentBitmap ?: error("Current bitmap must exist before adding decor")
-        val targetWidth = curr.width * widthRatio
+        val targetWidth = baseWidth() * widthRatio
         val aspect = (bitmap.width.toFloat() / bitmap.height.toFloat().coerceAtLeast(1f)).coerceAtLeast(0.01f)
         val targetHeight = targetWidth / aspect
         return DecorItemState(
@@ -995,7 +1026,7 @@ class ZoomableStickerView @JvmOverloads constructor(
         val brush = drawDecorBrush ?: return false
         val point = screenToCanvasPoint(screenX, screenY) ?: return false
         val randomScale = brush.minScaleRatio +
-            (brush.maxScaleRatio - brush.minScaleRatio) * kotlin.random.Random.nextFloat()
+                (brush.maxScaleRatio - brush.minScaleRatio) * kotlin.random.Random.nextFloat()
         val decor = createDecorState(
             id = java.util.UUID.randomUUID().toString(),
             bitmap = brush.bitmap,
@@ -1129,8 +1160,12 @@ class ZoomableStickerView @JvmOverloads constructor(
                 if (hitDecor != null) {
 
                     selectedDecor = hitDecor
-                    decorItems.remove(hitDecor)
-                    decorItems.add(hitDecor)
+                    if (!isProjectMode()) {
+                        // Chế độ cũ: đưa lên trên cùng. Project thì KHÔNG: chạm vào chủ thể sẽ đưa nó
+                        // đè lên chữ/decor, và thứ tự này cũng không được lưu vào layer.
+                        decorItems.remove(hitDecor)
+                        decorItems.add(hitDecor)
+                    }
                     isDraggingDecor = true
                     isDraggingHandle = false
                     isDecorMultiTouch = false

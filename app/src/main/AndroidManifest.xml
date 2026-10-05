@@ -8,6 +8,11 @@
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
+    <queries>
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+    </queries>
+
     <application
         android:name=".StickifyApplication"
         android:allowBackup="true"
@@ -24,6 +29,9 @@
             android:windowSoftInputMode="adjustResize"
             android:screenOrientation="portrait"
             />
+        <activity
+            android:name=".presentation.ui.collection.create_package.CreateStickerPackActivity"
+            android:exported="false" />
         <activity
             android:name=".presentation.ui.gallery.GalleryActivity"
             android:exported="false" />

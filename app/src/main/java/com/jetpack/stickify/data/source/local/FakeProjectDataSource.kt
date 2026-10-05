@@ -149,21 +149,15 @@ class FakeProjectDataSource @Inject constructor() {
         return listOf(
             StickerPack(
                 id = "pack_1",
-                name = "Vũ trụ dễ thương",
-                itemCount = 24,
-                type = ProjectType.STICKER
+                name = "Vũ trụ dễ thương"
             ),
             StickerPack(
                 id = "pack_2",
-                name = "Biểu cảm hài hước",
-                itemCount = 18,
-                type = ProjectType.STICKER
+                name = "Biểu cảm hài hước"
             ),
             StickerPack(
                 id = "pack_3",
-                name = "Động vật siêu quậy",
-                itemCount = 12,
-                type = ProjectType.STICKER
+                name = "Động vật siêu quậy"
             )
         )
     }

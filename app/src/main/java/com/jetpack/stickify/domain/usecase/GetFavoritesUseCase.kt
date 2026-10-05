@@ -1,6 +1,7 @@
 package com.jetpack.stickify.domain.usecase
 
 import com.jetpack.stickify.domain.model.FavoriteSticker
+import com.jetpack.stickify.domain.model.StickerProject
 import com.jetpack.stickify.domain.repository.ProjectRepository
 import javax.inject.Inject
 
@@ -10,7 +11,7 @@ import javax.inject.Inject
 class GetFavoritesUseCase @Inject constructor(
     private val repository: ProjectRepository
 ) {
-    suspend operator fun invoke(): Result<List<FavoriteSticker>> {
+    suspend operator fun invoke(): Result<List<StickerProject>> {
         return repository.getFavoriteStickers()
     }
 }

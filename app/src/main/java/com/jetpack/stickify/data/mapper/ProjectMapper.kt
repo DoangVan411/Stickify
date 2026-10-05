@@ -46,7 +46,8 @@ class ProjectMapper @Inject constructor() {
             createdAt = entity.createdAt,
             updatedAt = entity.updatedAt,
             content = content,
-            history = history
+            history = history,
+            isBookmarked = entity.isBookmarked
         )
     }
 
@@ -65,7 +66,8 @@ class ProjectMapper @Inject constructor() {
             createdAt = domain.createdAt,
             updatedAt = domain.updatedAt,
             contentJson = contentJson,
-            historyJson = historyJson
+            historyJson = historyJson,
+            isBookmarked = domain.isBookmarked
         )
     }
 }

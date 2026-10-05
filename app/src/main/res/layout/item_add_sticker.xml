@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/btnCreatePack"
+    android:layout_width="100dp"
+    android:layout_height="100dp"
+    android:layout_margin="6dp"
+    android:background="@drawable/bg_dashed_add_pack"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground"
+    android:layerType="software">
+
+    <ImageView
+        android:layout_width="52dp"
+        android:layout_height="52dp"
+        android:layout_gravity="center"
+        android:src="@drawable/ic_add_large" />
+
+</FrameLayout>

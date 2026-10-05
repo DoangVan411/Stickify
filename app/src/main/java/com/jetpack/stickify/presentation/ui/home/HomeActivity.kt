@@ -8,7 +8,6 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.coordinatorlayout.widget.CoordinatorLayout
@@ -135,7 +134,9 @@ class HomeActivity : AppCompatActivity() {
                 }
             }
             BottomNavTab.RESOURCES -> {
-                Toast.makeText(this, getString(R.string.tab_resources), Toast.LENGTH_SHORT).show()
+                if (navController.currentDestination?.id != R.id.assetFragment) {
+                    navController.navigate(R.id.assetFragment)
+                }
             }
         }
     }

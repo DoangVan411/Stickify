@@ -24,6 +24,7 @@ import com.jetpack.stickify.presentation.ui.edit_sticker.suggestion.SuggestionFr
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextToolFragment
 import com.jetpack.stickify.domain.model.StickerStyle
 import com.jetpack.stickify.domain.model.StickerAnimationType
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
@@ -31,9 +32,11 @@ import android.view.Gravity
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import com.jetpack.stickify.domain.model.TextAlign
+import com.jetpack.stickify.domain.model.BorderStyle
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import androidx.activity.OnBackPressedCallback // Nhớ thêm import này
+import com.jetpack.stickify.domain.model.SubjectLayer
 import com.jetpack.stickify.presentation.ui.edit_sticker.cancel.SaveConfirmDialogFragment
 
 /**
@@ -78,6 +81,18 @@ class StickerEditActivity : AppCompatActivity() {
     // Thêm cờ này để chặn onStop lưu thumbnail nếu chọn "Không lưu"
     private var isDiscardingChanges = false
 
+    // true = mở project có sẵn từ DB (render bằng layer). false = luồng mới từ CutoutActivity (render bằng bitmap style).
+    // KHÔNG dùng `currentProjectId != null` để phân biệt vì id luôn được gán ở cả 2 luồng.
+    private var isProjectMode = false
+
+    // Chỉ finish() khi CẢ export ảnh/GIF lẫn lưu project đã xong
+    private var pendingExport = false
+    private var pendingProject = false
+    private var exportResultUri: Uri? = null
+
+    // Thêm biến isNewProject và gán mặc định isProjectMode = true
+    private var isNewProject = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = DataBindingUtil.setContentView(this, R.layout.activity_sticker_edit)
@@ -92,6 +107,8 @@ class StickerEditActivity : AppCompatActivity() {
         // 1. Kiểm tra nếu có projectId chuyển sang từ RecentProjectAdapter (Room DB Clean Architecture flow)
         val projectId = intent.getStringExtra(EXTRA_PROJECT_ID)
         if (!projectId.isNullOrBlank()) {
+            isProjectMode = true
+            isNewProject = false
             currentProjectId = projectId
             editViewModel.loadProject(projectId)
             return
@@ -100,7 +117,15 @@ class StickerEditActivity : AppCompatActivity() {
         // 2. Kiểm tra nếu mở từ CutoutActivity qua Uri (Legacy Flow)
         val uri: Uri? = intent.getParcelableExtra(EXTRA_CROPPED_IMAGE_URI)
         if (uri != null) {
-            currentProjectId = "proj_${System.currentTimeMillis()}"
+            // Giữ nguyên id khi Activity bị tạo lại (xoay màn hình)
+            val newId = editViewModel.uiState.value.projectId ?: "proj_${System.currentTimeMillis()}"
+            currentProjectId = newId
+
+            isProjectMode = true // LUÔN CHẠY CHẾ ĐỘ PROJECT (LAYER)
+            isNewProject = true // Bật cờ dự án mới
+            // Tạo project (SubjectLayer + copy ảnh vào bộ nhớ app). Trước đây luồng này không bao giờ gọi
+            // initNewProject nên project được lưu với danh sách layer RỖNG.
+            editViewModel.initNewProject(this, newId, uri.toString())
             sharedViewModel.loadAndPrepareStyles(uri.toString())
         } else {
             Toast.makeText(this, "Không nhận được dữ liệu project hoặc ảnh đầu vào", Toast.LENGTH_LONG).show()
@@ -110,16 +135,26 @@ class StickerEditActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        val projectId = currentProjectId
-        if (!projectId.isNullOrEmpty()) {
-            val canvasView = binding.zoomableView
-            if (canvasView.width > 0 && canvasView.height > 0) {
-                runCatching {
-                    val bitmap = canvasView.captureToBitmap()
-                    editViewModel.captureAndSaveThumbnail(projectId, bitmap)
-                }
-            }
-        }
+        // Chọn "Không lưu" hoặc project chưa từng được lưu -> không ghi thumbnail
+        if (isDiscardingChanges || !editViewModel.isPersisted) return
+        val projectId = currentProjectId ?: return
+        captureCurrentBitmap()?.let { editViewModel.captureAndSaveThumbnail(projectId, it) }
+    }
+
+    private fun captureCurrentBitmap(): Bitmap? {
+        val view = binding.zoomableView
+        if (view.width <= 0 || view.height <= 0) return null
+        return runCatching {
+            if (isProjectMode) view.renderProjectBitmap() else view.captureToBitmap()
+        }.getOrNull()
+    }
+
+    private fun finishWhenSaveDone() {
+        if (pendingExport || pendingProject) return
+        val uri = exportResultUri
+        if (uri != null) setResult(RESULT_OK, Intent().putExtra(EXTRA_RESULT_URI, uri)) else setResult(RESULT_OK)
+        Toast.makeText(this, "Đã lưu sticker thành công!", Toast.LENGTH_SHORT).show()
+        finish()
     }
 
     private fun setupObservers() {
@@ -131,7 +166,16 @@ class StickerEditActivity : AppCompatActivity() {
         sharedViewModel.currentStyle.observe(this) { style ->
             val bitmap = sharedViewModel.styleBitmaps[style]
             if (bitmap != null) {
-                binding.zoomableView.setBitmap(bitmap, animate = true)
+                if (isProjectMode) {
+                    // Cập nhật ảnh Preview trực tiếp vào SubjectLayer thay vì ghi đè toàn bộ View
+                    val subjectLayerId = editViewModel.uiState.value.editorSession.content.layers
+                        .find { it is SubjectLayer }?.id
+                    if (subjectLayerId != null) {
+                        binding.zoomableView.preloadLayerBitmap(subjectLayerId, bitmap)
+                    }
+                } else {
+                    binding.zoomableView.setBitmap(bitmap, animate = true)
+                }
             }
         }
 
@@ -141,10 +185,9 @@ class StickerEditActivity : AppCompatActivity() {
 
         sharedViewModel.saveSuccessEvent.observe(this) { savedUriString ->
             if (savedUriString != null) {
-                val resultUri = Uri.parse(savedUriString)
-                setResult(RESULT_OK, Intent().putExtra(EXTRA_RESULT_URI, resultUri))
-                Toast.makeText(this, "Đã tạo sticker thành công!", Toast.LENGTH_SHORT).show()
-                finish()
+                exportResultUri = Uri.parse(savedUriString)
+                pendingExport = false
+                finishWhenSaveDone()
             }
         }
 
@@ -154,7 +197,14 @@ class StickerEditActivity : AppCompatActivity() {
                 binding.zoomableView.setDrawDecorBrush(null)
                 val bitmap = decor.customBitmap ?: BitmapFactory.decodeResource(resources, decor.resId)
                 if (bitmap != null) {
-                    binding.zoomableView.addDecorBitmap(bitmap, decor.id)
+                    if (isProjectMode) {
+                        // Project: decor là DecorationLayer (lưu DB + undo/redo), không chỉ là decor tạm trong view
+                        val layerId = "layer_dec_${java.util.UUID.randomUUID()}"
+                        binding.zoomableView.preloadLayerBitmap(layerId, bitmap)
+                        editViewModel.addDecorationFromBitmap(this, bitmap, layerId)
+                    } else {
+                        binding.zoomableView.addDecorBitmap(bitmap, decor.id)
+                    }
                 }
             }
         }
@@ -178,14 +228,43 @@ class StickerEditActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 editViewModel.uiState.collect { state ->
-                    if (state.isSaveSuccess) {
-                        Toast.makeText(this@StickerEditActivity, "Đã lưu project thành công!", Toast.LENGTH_SHORT).show()
-                        setResult(RESULT_OK)
+                    if (state.loadFailed) {
+                        Toast.makeText(
+                            this@StickerEditActivity,
+                            state.error ?: "Không thể mở project",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        editViewModel.consumeError()
                         finish()
+                        return@collect
                     }
 
-                    if (!state.error.isNullOrBlank()) {
-                        Toast.makeText(this@StickerEditActivity, state.error, Toast.LENGTH_SHORT).show()
+                    if (isProjectMode) {
+                        binding.progressBar.visibility = if (state.isLoading) View.VISIBLE else View.GONE
+                        updateUndoRedoButtons(state.canUndo, state.canRedo)
+                        // BƯỚC BỊ THIẾU trước đây: đẩy nội dung project (các layer) vào view để vẽ.
+                        if (!state.isLoading) {
+                            binding.zoomableView.setProjectContent(
+                                state.editorSession.content,
+                                editViewModel.assetLoader
+                            )
+                        }
+                    }
+
+                    state.lastAddedLayerId?.let { id ->
+                        binding.zoomableView.selectLayer(id)
+                        editViewModel.consumeAddedLayer()
+                    }
+
+                    if (state.isSaveSuccess && pendingProject) {
+                        pendingProject = false
+                        finishWhenSaveDone()
+                    }
+
+                    val err = state.error
+                    if (!err.isNullOrBlank()) {
+                        Toast.makeText(this@StickerEditActivity, err, Toast.LENGTH_SHORT).show()
+                        editViewModel.consumeError() // tránh Toast lặp lại ở mỗi lần state đổi
                     }
                 }
             }
@@ -193,7 +272,7 @@ class StickerEditActivity : AppCompatActivity() {
     }
 
     private fun updateUndoRedoButtons(canUndo: Boolean, canRedo: Boolean) {
-        val legacyMode = currentProjectId == null
+        val legacyMode = !isProjectMode
         val canUndoEffective = if (legacyMode) true else canUndo
         binding.btnUndo.isEnabled = canUndoEffective
         binding.btnUndo.alpha = if (canUndoEffective) 1f else 0.35f
@@ -206,7 +285,7 @@ class StickerEditActivity : AppCompatActivity() {
         binding.btnBack.setOnClickListener { showSaveConfirmationDialog() }
 
         binding.btnUndo.setOnClickListener {
-            if (currentProjectId != null) {
+            if (isProjectMode) {
                 editViewModel.undo()
             } else {
                 if (binding.zoomableView.undoLastDrawDecorStroke()) {
@@ -217,7 +296,7 @@ class StickerEditActivity : AppCompatActivity() {
         }
 
         binding.btnRedo.setOnClickListener {
-            if (currentProjectId != null) {
+            if (isProjectMode) {
                 editViewModel.redo()
             } else {
                 sharedViewModel.moveHistory(1)
@@ -244,18 +323,23 @@ class StickerEditActivity : AppCompatActivity() {
             val input = layoutText.etOverlayText.text.toString().trim()
 
             if (input.isNotEmpty()) {
-                if (currentProjectId != null) {
-                    if (editingTextLayerId != null) {
-                        editViewModel.updateTextLayer(editingTextLayerId!!, input, currentTextColor, currentTextAlign)
+                if (isProjectMode) {
+                    // Project: chữ là TextLayer (có Undo/Redo, được lưu vào DB)
+                    val id = editingTextLayerId
+                    if (id != null) {
+                        editViewModel.updateTextLayer(id, input, currentTextColor, currentTextAlign)
                     } else {
                         editViewModel.addTextLayer(input, currentTextColor, currentTextAlign)
                     }
+                } else {
+                    // Luồng mới: chữ là decor trong view, sẽ được "nướng" vào ảnh khi lưu.
+                    // (Trước đây gọi cả 2 -> chữ bị nhân đôi.)
+                    binding.zoomableView.addTextItem(
+                        text = input,
+                        textColor = currentTextColor,
+                        existingId = editingTextLayerId
+                    )
                 }
-                binding.zoomableView.addTextItem(
-                    text = input,
-                    textColor = currentTextColor,
-                    existingId = editingTextLayerId
-                )
             }
 
             layoutText.textInputOverlay.visibility = View.GONE
@@ -299,22 +383,31 @@ class StickerEditActivity : AppCompatActivity() {
     }
 
     private fun setupDoubleTapToEditText() {
-        // Lắng nghe Double Tap từ luồng mới (TextLayer)
-        binding.zoomableView.onTextLayerDoubleTapped = { textLayer ->
-            editingTextLayerId = textLayer.id
-            currentTextColor = textLayer.colorArgb
-            currentTextAlign = textLayer.align
-
-            showTextInputOverlay(textLayer.content, textLayer.align)
+        // Layer decor/chữ của project: kéo/xoay/phóng/xóa/nhân bản -> ghi vào lịch sử qua ViewModel
+        binding.zoomableView.onLayerTransformed = { id, cx, cy, scale, rotation ->
+            if (isProjectMode) editViewModel.updateLayerTransform(id, cx, cy, scale, rotation)
+        }
+        binding.zoomableView.onLayerDeleted = { id ->
+            if (isProjectMode) editViewModel.removeLayer(id)
+        }
+        binding.zoomableView.onLayerDuplicated = { sourceId, newId, cx, cy ->
+            if (isProjectMode) editViewModel.duplicateLayer(sourceId, newId, cx, cy)
+        }
+        binding.zoomableView.onDecorStampsCommitted = { bitmap, stamps ->
+            if (isProjectMode) editViewModel.addStampLayers(this, bitmap, stamps)
         }
 
-        // Lắng nghe Double Tap từ luồng cũ (DecorItemState)
+        // Double tap vào chữ (ở cả 2 chế độ chữ đều là decor có textContent trong view)
         binding.zoomableView.onTextDecorDoubleTapped = { decor ->
             editingTextLayerId = decor.id
-            currentTextColor = decor.textColor ?: Color.WHITE
-            currentTextAlign = TextAlign.CENTER // Mặc định do luồng cũ vẽ chữ căn giữa
+            val layer = if (isProjectMode) {
+                editViewModel.uiState.value.editorSession.content.layers
+                    .find { it.id == decor.id } as? com.jetpack.stickify.domain.model.TextLayer
+            } else null
+            currentTextColor = layer?.colorArgb ?: decor.textColor ?: Color.WHITE
+            currentTextAlign = layer?.align ?: TextAlign.CENTER
 
-            showTextInputOverlay(decor.textContent ?: "", TextAlign.CENTER)
+            showTextInputOverlay(layer?.content ?: decor.textContent ?: "", currentTextAlign)
         }
     }
 
@@ -475,54 +568,47 @@ class StickerEditActivity : AppCompatActivity() {
         }
     }
 
-    private fun syncBorderToEditViewModel() {
-        if (currentProjectId != null) {
-            val thickness = sharedViewModel.currentBorderThickness.value?.toFloat() ?: 30f
-            val distance = sharedViewModel.currentBorderDistance.value?.toFloat() ?: 20f
-            val color = sharedViewModel.currentBorderColor.value ?: Color.WHITE
-            editViewModel.updateBorder(thickness, distance, color)
-        }
-    }
-
     private fun handleSaveProjectAction() {
         val projectId = currentProjectId ?: "proj_${System.currentTimeMillis()}".also { currentProjectId = it }
-        captureThumbnailIfValid(projectId)
+        val view = binding.zoomableView
 
-        val baseBitmap = sharedViewModel.styleBitmaps[sharedViewModel.currentStyle.value ?: StickerStyle.ORIGINAL]
-        val finalBitmap = if (baseBitmap != null && binding.zoomableView.hasDecors()) {
-            binding.zoomableView.renderCompositeBitmap(baseBitmap)
+        val styledBitmap: Bitmap?
+        val exportBitmap: Bitmap?
+        if (isProjectMode) {
+            // Chỉ lấy styledBitmap nếu là project mới (để lưu viền/cartoon vào layer ảnh gốc)
+            styledBitmap = if (isNewProject) sharedViewModel.styleBitmaps[sharedViewModel.currentStyle.value ?: StickerStyle.ORIGINAL] else null
+            exportBitmap = view.renderProjectBitmap()
         } else {
-            baseBitmap ?: binding.zoomableView.captureToBitmap()
+            val base = sharedViewModel.styleBitmaps[sharedViewModel.currentStyle.value ?: StickerStyle.ORIGINAL]
+            val finalBitmap = if (base != null && view.hasDecors()) view.renderCompositeBitmap(base) else base
+            styledBitmap = finalBitmap
+            exportBitmap = finalBitmap ?: captureCurrentBitmap()
         }
 
-        if (finalBitmap != null) {
-            sharedViewModel.saveCurrentSticker(finalBitmap)
+        pendingProject = true
+        pendingExport = false
+        exportResultUri = null
+        if (exportBitmap != null) {
+            pendingExport = true
+            sharedViewModel.saveCurrentSticker(exportBitmap)
         }
 
-        val thickness = sharedViewModel.currentBorderThickness.value?.toFloat() ?: 30f
-        val distance = sharedViewModel.currentBorderDistance.value?.toFloat() ?: 20f
-        val color = sharedViewModel.currentBorderColor.value ?: Color.WHITE
+        // Nếu là mở project cũ, không ghi đè viền bằng giá trị mặc định của thanh công cụ
         val anim = sharedViewModel.currentAnimation.value ?: StickerAnimationType.NONE
+        val border = if (!isNewProject) null else BorderStyle(
+            thickness = sharedViewModel.currentBorderThickness.value?.toFloat() ?: 30f,
+            spacing = sharedViewModel.currentBorderDistance.value?.toFloat() ?: 20f,
+            colorArgb = sharedViewModel.currentBorderColor.value ?: Color.WHITE
+        )
 
         editViewModel.saveProjectWithDetails(
+            context = this,
             projectId = projectId,
-            borderThickness = thickness,
-            borderDistance = distance,
-            borderColor = color,
-            animationType = anim
+            border = border,
+            animationType = if (!isNewProject && anim == StickerAnimationType.NONE) null else anim,
+            styledBitmap = styledBitmap,
+            thumbnailBitmap = captureCurrentBitmap()
         )
-    }
-
-    private fun captureThumbnailIfValid(projectId: String) {
-        val canvasView = binding.zoomableView
-        if (canvasView.width > 0 && canvasView.height > 0) {
-            runCatching {
-                val bitmap = canvasView.captureToBitmap()
-                editViewModel.captureAndSaveThumbnail(projectId, bitmap)
-            }.onFailure { e ->
-                e.printStackTrace()
-            }
-        }
     }
 
     private fun handleDiscardChangesAction() {

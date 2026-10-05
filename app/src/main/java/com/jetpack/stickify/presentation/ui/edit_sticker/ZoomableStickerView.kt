@@ -54,7 +54,8 @@ class ZoomableStickerView @JvmOverloads constructor(
     private var projectContent: ProjectContent? = null
     private var assetLoader: AssetLoader? = null
     private val layerBitmaps = mutableMapOf<String, Bitmap>()
-    private val viewScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val layerSourceKeys = mutableMapOf<String, String>()
+    private var viewScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     // Ma trận hiển thị chung
     private val displayMatrix = Matrix()
@@ -88,10 +89,36 @@ class ZoomableStickerView @JvmOverloads constructor(
         var rotation: Float = 0f,
         val isEditable: Boolean = true,
         var textContent: String? = null, // Lưu lại nội dung chữ
-        var textColor: Int? = null       // Lưu lại màu chữ
+        var textColor: Int? = null,       // Lưu lại màu chữ
+        val isSubject: Boolean = false // <--- THÊM CỜ NÀY
     )
 
     private val decorItems = mutableListOf<DecorItemState>()
+
+    // ---------- Project mode: layer decor/text <-> decorItems ----------
+    /** Thông tin 1 "con dấu" khi vẽ decor bằng brush ở project mode (đơn vị: tọa độ canvas project). */
+    data class StampSpec(val id: String, val cx: Float, val cy: Float, val scale: Float)
+
+    /** Người dùng kéo/xoay/phóng xong 1 layer: (layerId, cx, cy, scale, rotationDeg). */
+    var onLayerTransformed: ((String, Float, Float, Float, Float) -> Unit)? = null
+    /** Người dùng bấm xóa 1 layer. */
+    var onLayerDeleted: ((String) -> Unit)? = null
+    /** Người dùng bấm nhân bản: (sourceId, newId, cx, cy). */
+    var onLayerDuplicated: ((String, String, Float, Float) -> Unit)? = null
+    /** Kết thúc 1 nét vẽ brush: (bitmap brush, danh sách con dấu). */
+    var onDecorStampsCommitted: ((Bitmap, List<StampSpec>) -> Unit)? = null
+
+    private var gestureSnapshot: FloatArray? = null
+    private var pendingSelectId: String? = null
+    private val preloadedIds = mutableSetOf<String>()
+    private val textBitmapCache = mutableMapOf<String, Pair<String, Bitmap>>()
+
+    private fun isProjectMode() = projectContent != null
+    private fun hasContent() = currentBitmap != null || projectContent != null
+    private fun baseWidth(): Float = currentBitmap?.width?.toFloat()
+        ?: projectContent?.canvas?.width?.toFloat()?.takeIf { it > 0f } ?: 512f
+    private fun baseHeight(): Float = currentBitmap?.height?.toFloat()
+        ?: projectContent?.canvas?.height?.toFloat()?.takeIf { it > 0f } ?: 512f
     private data class DrawDecorBrush(
         val id: String,
         val bitmap: Bitmap,
@@ -161,12 +188,12 @@ class ZoomableStickerView @JvmOverloads constructor(
     fun hasDecors(): Boolean = decorItems.isNotEmpty()
 
     fun addDecorBitmap(bitmap: Bitmap, id: String = java.util.UUID.randomUUID().toString()) {
-        val curr = currentBitmap ?: return
+        if (!hasContent()) return
         val decor = createDecorState(
             id = id,
             bitmap = bitmap,
-            x = curr.width / 2f,
-            y = curr.height / 2f,
+            x = baseWidth() / 2f,
+            y = baseHeight() / 2f,
             widthRatio = 0.45f
         )
         decorItems.add(decor)
@@ -248,7 +275,15 @@ class ZoomableStickerView @JvmOverloads constructor(
         }
     }
 
+    private fun assetKey(asset: AssetRef): String = when (asset) {
+        is CustomAsset -> "c:${asset.relativePath}"
+        is BuiltinAsset -> "b:${asset.packId}/${asset.assetId}"
+        is RemoteAsset -> "r:${asset.url}"
+        else -> asset.toString()
+    }
+
     fun setProjectContent(content: ProjectContent, loader: AssetLoader) {
+        crossfadeAnimator?.cancel()
         currentBitmap = null
         previousBitmap = null
         projectContent = content
@@ -261,28 +296,184 @@ class ZoomableStickerView @JvmOverloads constructor(
             resetTransformToFit(canvasWidth, canvasHeight)
         }
 
-        // Load bitmaps cho các layer bất đồng bộ
+        // Bỏ bitmap của các layer đã bị xóa (Undo thêm layer, v.v.)
+        val liveIds = content.layers.map { it.id }.toSet()
+        preloadedIds.removeAll(liveIds) // layer đã xuất hiện trong content -> hết là "preload"
+        layerBitmaps.keys.retainAll(liveIds + preloadedIds)
+        layerSourceKeys.keys.retainAll(liveIds)
+        textBitmapCache.keys.retainAll(liveIds)
+
+        // Chỉ load layer mới hoặc layer đổi nguồn ảnh -> không nháy/không decode lại mỗi lần thao tác
+        val pending = content.layers.mapNotNull { layer ->
+            val asset: AssetRef? = when (layer) {
+                is DecorationLayer -> layer.asset
+                is SubjectLayer ->
+                    if (layer.styledPath.isNotBlank()) CustomAsset(layer.styledPath) else layer.source
+                else -> null
+            }
+            if (asset == null) return@mapNotNull null
+            val key = assetKey(asset)
+            val cached = layerBitmaps[layer.id]
+            if (layerSourceKeys[layer.id] == key && cached != null && !cached.isRecycled) null
+            else Triple(layer, asset, key)
+        }
+
+        syncLayerItems(content)
+        invalidate()
+        if (pending.isEmpty()) return
+
         viewScope.launch {
-            for (layer in content.layers) {
-                if (layer is DecorationLayer) {
-                    val bmp = loader.loadBitmap(layer.asset)
-                    if (bmp != null) {
-                        layerBitmaps[layer.id] = bmp
-                    }
-                } else if (layer is SubjectLayer) {
-                    val sourceAsset = if (layer.styledPath.isNotBlank()) {
-                        CustomAsset(layer.styledPath)
-                    } else {
-                        layer.source
-                    }
-                    val bmp = loader.loadBitmap(sourceAsset) ?: loader.loadBitmap(layer.source)
-                    if (bmp != null) {
-                        layerBitmaps[layer.id] = bmp
-                    }
+            for ((layer, asset, key) in pending) {
+                // Decode ảnh ở IO, không chặn main thread
+                val bmp = withContext(Dispatchers.IO) {
+                    loader.loadBitmap(asset)
+                        ?: if (layer is SubjectLayer) loader.loadBitmap(layer.source) else null
+                }
+                if (bmp != null) {
+                    layerBitmaps[layer.id] = bmp
+                    layerSourceKeys[layer.id] = key
+                    // Chỉ sync nếu content hiện tại vẫn là content đã yêu cầu (tránh ghi đè state mới hơn)
+                    if (projectContent === content) syncLayerItems(content)
+                    postInvalidate()
+                } else {
+                    android.util.Log.w("ZoomableStickerView", "Không load được ảnh cho layer ${layer.id}: $key")
                 }
             }
-            postInvalidate()
         }
+    }
+
+    /** Vẽ toàn bộ layer của project ra bitmap đúng kích thước canvas (dùng để export / thumbnail). */
+    fun renderProjectBitmap(): Bitmap? {
+        val content = projectContent ?: return null
+        val w = content.canvas.width.takeIf { it > 0 } ?: 512
+        val h = content.canvas.height.takeIf { it > 0 } ?: 512
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        for (layer in content.layers) {
+            if (layer.visible && layer !is DecorationLayer && layer !is TextLayer && layer !is SubjectLayer) drawLayer(c, layer)
+        }
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        for (decor in decorItems) {
+            c.save()
+            c.translate(decor.x, decor.y)
+            c.rotate(decor.rotation)
+            val dw = decor.width * decor.scale
+            val dh = decor.height * decor.scale
+            c.drawBitmap(decor.bitmap, null, RectF(-dw / 2f, -dh / 2f, dw / 2f, dh / 2f), paint)
+            c.restore()
+        }
+        return bmp
+    }
+
+    /** Đăng ký trước bitmap cho 1 layer sắp được thêm (để hiển thị ngay, không phải chờ đọc file). */
+    fun preloadLayerBitmap(layerId: String, bitmap: Bitmap) {
+        preloadedIds.add(layerId)
+        layerBitmaps[layerId] = bitmap
+        projectContent?.let { syncLayerItems(it) } // Đồng bộ lại kích thước lập tức
+        invalidate()
+    }
+
+    /** Chọn 1 layer (hiện khung + handle). Nếu layer chưa sẵn sàng sẽ chọn ngay khi nó xuất hiện. */
+    fun selectLayer(layerId: String) {
+        pendingSelectId = layerId
+        applyPendingSelection()
+        invalidate()
+    }
+
+    private fun applyPendingSelection() {
+        val id = pendingSelectId ?: return
+        val item = decorItems.find { it.id == id } ?: return
+        selectedDecor = item
+        pendingSelectId = null
+    }
+
+    private fun buildTextLayerBitmap(layer: TextLayer): Bitmap {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = layer.colorArgb
+            textSize = 120f
+            typeface = Typeface.DEFAULT_BOLD
+            textSkewX = if (layer.italic) -0.25f else 0f
+        }
+        val lines = layer.content.split("\n")
+        val lineHeight = paint.descent() - paint.ascent()
+        val maxWidth = lines.maxOf { paint.measureText(it) }
+        val padding = 40
+        val bmp = Bitmap.createBitmap(
+            (maxWidth + padding * 2).toInt().coerceAtLeast(1),
+            (lineHeight * lines.size + padding * 2).toInt().coerceAtLeast(1),
+            Bitmap.Config.ARGB_8888
+        )
+        val c = Canvas(bmp)
+        var y = padding - paint.ascent()
+        val factor = when (layer.align) {
+            TextAlign.LEFT -> 0f
+            TextAlign.CENTER -> 0.5f
+            TextAlign.RIGHT -> 1f
+        }
+        for (line in lines) {
+            c.drawText(line, padding + (maxWidth - paint.measureText(line)) * factor, y, paint)
+            y += lineHeight
+        }
+        return bmp
+    }
+
+    /**
+     * Đồng bộ các layer Decoration/Text của project thành decorItems để dùng lại toàn bộ
+     * cơ chế chọn / kéo / xoay / phóng / xóa / nhân bản của chế độ cũ.
+     * Tọa độ decorItems ở project mode chính là tọa độ canvas project.
+     */
+    private fun syncLayerItems(content: ProjectContent) {
+        // Đang kéo layer thì không dựng lại, tránh giật/đứt cử chỉ
+        if (isDraggingDecor || isDraggingHandle) return
+
+        val prevSelectedId = pendingSelectId ?: selectedDecor?.id
+        val cw = content.canvas.width.toFloat().takeIf { it > 0f } ?: 512f
+        val items = mutableListOf<DecorItemState>()
+
+        for (layer in content.layers) {
+            if (!layer.visible) continue
+            val tf = layer.transform
+            if (layer is DecorationLayer) {
+                val bmp = layerBitmaps[layer.id]?.takeIf { !it.isRecycled } ?: continue
+                val w = cw * 0.45f
+                val h = w * bmp.height / bmp.width.coerceAtLeast(1)
+                items.add(DecorItemState(layer.id, bmp, tf.cx, tf.cy, w, h, tf.scale, tf.rotationDeg))
+            } else if (layer is TextLayer) {
+                if (layer.content.isBlank()) continue
+                val key = "${layer.content}|${layer.colorArgb}|${layer.align}|${layer.italic}"
+                val cached = textBitmapCache[layer.id]
+                val bmp = if (cached != null && cached.first == key) cached.second
+                else buildTextLayerBitmap(layer).also { textBitmapCache[layer.id] = key to it }
+                val k = 0.5f * layer.fontSizeRatio.coerceIn(0.5f, 3f)
+                items.add(
+                    DecorItemState(
+                        layer.id, bmp, tf.cx, tf.cy, bmp.width * k, bmp.height * k,
+                        tf.scale, tf.rotationDeg,
+                        textContent = layer.content, textColor = layer.colorArgb
+                    )
+                )
+            } else if(layer is SubjectLayer){
+                // Chuyển SubjectLayer thành item có thể tương tác xoay/phóng
+                val bmp = layerBitmaps[layer.id]?.takeIf { !it.isRecycled } ?: continue
+                val cw = content.canvas.width.toFloat().takeIf { it > 0f } ?: 512f
+                val ch = content.canvas.height.toFloat().takeIf { it > 0f } ?: 512f
+                val base = min(cw / bmp.width, ch / bmp.height)
+                items.add(DecorItemState(layer.id, bmp, tf.cx, tf.cy, bmp.width * base, bmp.height * base, tf.scale, tf.rotationDeg, isSubject = true))
+            }
+        }
+
+        // Giữ lại các con dấu brush đang chờ lưu (chưa thành layer) để không bị nháy mất
+        val liveIds = items.map { it.id }.toSet()
+        val contentIds = content.layers.map { it.id }.toSet()
+        val waiting = decorItems.filter { it.id in preloadedIds && it.id !in contentIds && it.id !in liveIds }
+
+        decorItems.clear()
+        decorItems.addAll(items)
+        decorItems.addAll(waiting)
+
+        selectedDecor = prevSelectedId?.let { id -> decorItems.find { it.id == id } }
+        if (pendingSelectId != null) applyPendingSelection()
+        invalidate()
     }
 
     /**
@@ -374,6 +565,11 @@ class ZoomableStickerView @JvmOverloads constructor(
         }
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (!viewScope.isActive) viewScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    }
+
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         crossfadeAnimator?.cancel()
@@ -393,9 +589,12 @@ class ZoomableStickerView @JvmOverloads constructor(
             canvas.concat(displayMatrix)
             for (layer in content.layers) {
                 if (!layer.visible) continue
+                // Bỏ qua SubjectLayer vì nó đã được vẽ và xử lý toạ độ trong list decorItems bên dưới
+                if (layer is DecorationLayer || layer is TextLayer || layer is SubjectLayer) continue
                 drawLayer(canvas, layer)
             }
             canvas.restore()
+            drawDecorItems(canvas)
         } else {
             // 3. Single bitmap preview mode (Legacy Cutout / SharedViewModel)
             val curr = currentBitmap ?: return
@@ -436,32 +635,50 @@ class ZoomableStickerView @JvmOverloads constructor(
             canvas.drawBitmap(curr, displayMatrix, bitmapPaintCurrent)
 
             // 4. Vẽ các vật phẩm Decor
-            val currentScale = currentMatrixScale()
-            val density = resources.displayMetrics.density
-
-            for (decor in decorItems) {
-                val pts = floatArrayOf(decor.x, decor.y)
-                displayMatrix.mapPoints(pts)
-                val screenX = pts[0]
-                val screenY = pts[1]
-                val screenW = decor.width * decor.scale * currentScale
-                val screenH = decor.height * decor.scale * currentScale
-
-                canvas.save()
-                canvas.translate(screenX, screenY)
-                canvas.rotate(decor.rotation)
-
-                val rect = RectF(-screenW / 2f, -screenH / 2f, screenW / 2f, screenH / 2f)
-                canvas.drawBitmap(decor.bitmap, null, rect, decorPaint)
-                canvas.restore()
-
-                if (decor == selectedDecor) {
-                    drawSelectedDecorOverlay(canvas, decor, currentScale, density)
-                }
-            }
+            drawDecorItems(canvas)
 
             if (hasAnim) {
                 canvas.restore()
+            }
+        }
+    }
+
+    /**
+     * Tỉ lệ nền để ảnh nằm vừa trong canvas project (512x512):
+     * - Chủ thể: fit vào canvas (ảnh cắt thường rất lớn, vẽ nguyên kích thước sẽ tràn khỏi canvas
+     *   và người dùng chỉ thấy một mảnh ở giữa).
+     * - Decor: rộng 45% canvas, giống luồng thêm decor cũ.
+     */
+    private fun baseScaleFor(layer: Layer, bmp: Bitmap): Float {
+        val content = projectContent
+        val cw = (content?.canvas?.width ?: 512).takeIf { it > 0 }?.toFloat() ?: 512f
+        val ch = (content?.canvas?.height ?: 512).takeIf { it > 0 }?.toFloat() ?: 512f
+        return when (layer) {
+            is SubjectLayer -> min(cw / bmp.width, ch / bmp.height)
+            is DecorationLayer -> cw * 0.45f / bmp.width
+            else -> 1f
+        }
+    }
+
+    /** Vẽ decorItems (và khung chọn) ở hệ tọa độ màn hình, dùng chung cho cả 2 chế độ. */
+    private fun drawDecorItems(canvas: Canvas) {
+        val currentScale = currentMatrixScale()
+        val density = resources.displayMetrics.density
+        for (decor in decorItems) {
+            val pts = floatArrayOf(decor.x, decor.y)
+            displayMatrix.mapPoints(pts)
+            val screenW = decor.width * decor.scale * currentScale
+            val screenH = decor.height * decor.scale * currentScale
+
+            canvas.save()
+            canvas.translate(pts[0], pts[1])
+            canvas.rotate(decor.rotation)
+            val rect = RectF(-screenW / 2f, -screenH / 2f, screenW / 2f, screenH / 2f)
+            canvas.drawBitmap(decor.bitmap, null, rect, decorPaint)
+            canvas.restore()
+
+            if (decor == selectedDecor) {
+                drawSelectedDecorOverlay(canvas, decor, currentScale, density)
             }
         }
     }
@@ -470,30 +687,22 @@ class ZoomableStickerView @JvmOverloads constructor(
         canvas.save()
         val transform = layer.transform
 
-        // Áp dụng Transform của Layer (cx, cy, scale, rotation, opacity, flipX)
+        // translate -> rotate -> scale (flipX chỉ lật ảnh, không đảo chiều xoay)
         canvas.translate(transform.cx, transform.cy)
-        canvas.scale(if (transform.flipX) -transform.scale else transform.scale, transform.scale)
         canvas.rotate(transform.rotationDeg)
+        canvas.scale(if (transform.flipX) -transform.scale else transform.scale, transform.scale)
 
         val alphaInt = (transform.opacity.coerceIn(0f, 1f) * 255).toInt()
 
         when (layer) {
-            is DecorationLayer -> {
+            is DecorationLayer, is SubjectLayer -> {
                 val bmp = layerBitmaps[layer.id]
                 if (bmp != null && !bmp.isRecycled) {
+                    val base = baseScaleFor(layer, bmp)
+                    canvas.scale(base, base)
                     bitmapPaintCurrent.alpha = alphaInt
-                    val left = -bmp.width / 2f
-                    val top = -bmp.height / 2f
-                    canvas.drawBitmap(bmp, left, top, bitmapPaintCurrent)
-                }
-            }
-            is SubjectLayer -> {
-                val bmp = layerBitmaps[layer.id]
-                if (bmp != null && !bmp.isRecycled) {
-                    bitmapPaintCurrent.alpha = alphaInt
-                    val left = -bmp.width / 2f
-                    val top = -bmp.height / 2f
-                    canvas.drawBitmap(bmp, left, top, bitmapPaintCurrent)
+                    canvas.drawBitmap(bmp, -bmp.width / 2f, -bmp.height / 2f, bitmapPaintCurrent)
+                    bitmapPaintCurrent.alpha = 255
                 }
             }
             is TextLayer -> {
@@ -580,19 +789,20 @@ class ZoomableStickerView @JvmOverloads constructor(
         for (corner in corners) {
             canvas.drawCircle(corner[0], corner[1], handleRadius, handleFillPaint)
         }
-
-        val actionLayout = buildActionPillLayout(corners, density)
-        val radius = actionLayout.pillRect.height() / 2f
-        canvas.drawRoundRect(actionLayout.pillRect, radius, radius, actionPillPaint)
-        canvas.drawLine(
-            actionLayout.duplicateRect.right,
-            actionLayout.pillRect.top + 8f * density,
-            actionLayout.duplicateRect.right,
-            actionLayout.pillRect.bottom - 8f * density,
-            actionPillDividerPaint
-        )
-        canvas.drawBitmap(duplicateBitmap, null, actionLayout.duplicateRect, decorPaint)
-        canvas.drawBitmap(trashBitmap, null, actionLayout.deleteRect, decorPaint)
+        if (!decor.isSubject) {
+            val actionLayout = buildActionPillLayout(corners, density)
+            val radius = actionLayout.pillRect.height() / 2f
+            canvas.drawRoundRect(actionLayout.pillRect, radius, radius, actionPillPaint)
+            canvas.drawLine(
+                actionLayout.duplicateRect.right,
+                actionLayout.pillRect.top + 8f * density,
+                actionLayout.duplicateRect.right,
+                actionLayout.pillRect.bottom - 8f * density,
+                actionPillDividerPaint
+            )
+            canvas.drawBitmap(duplicateBitmap, null, actionLayout.duplicateRect, decorPaint)
+            canvas.drawBitmap(trashBitmap, null, actionLayout.deleteRect, decorPaint)
+        }
     }
 
     private fun getDecorCornersInScreen(decor: DecorItemState, matrixScale: Float): Array<FloatArray> {
@@ -659,6 +869,7 @@ class ZoomableStickerView @JvmOverloads constructor(
     }
 
     private fun getDecorActionAt(decor: DecorItemState, touchX: Float, touchY: Float): DecorAction? {
+        if (decor.isSubject) return null // Chủ thể không thể bị xóa hay nhân bản
         val corners = getDecorCornersInScreen(decor, currentMatrixScale())
         val layout = buildActionPillLayout(corners, resources.displayMetrics.density)
         return when {
@@ -743,8 +954,7 @@ class ZoomableStickerView @JvmOverloads constructor(
         widthRatio: Float,
         isEditable: Boolean = true
     ): DecorItemState {
-        val curr = currentBitmap ?: error("Current bitmap must exist before adding decor")
-        val targetWidth = curr.width * widthRatio
+        val targetWidth = baseWidth() * widthRatio
         val aspect = (bitmap.width.toFloat() / bitmap.height.toFloat().coerceAtLeast(1f)).coerceAtLeast(0.01f)
         val targetHeight = targetWidth / aspect
         return DecorItemState(
@@ -770,7 +980,7 @@ class ZoomableStickerView @JvmOverloads constructor(
         val brush = drawDecorBrush ?: return false
         val point = screenToCanvasPoint(screenX, screenY) ?: return false
         val randomScale = brush.minScaleRatio +
-            (brush.maxScaleRatio - brush.minScaleRatio) * kotlin.random.Random.nextFloat()
+                (brush.maxScaleRatio - brush.minScaleRatio) * kotlin.random.Random.nextFloat()
         val decor = createDecorState(
             id = java.util.UUID.randomUUID().toString(),
             bitmap = brush.bitmap,
@@ -790,7 +1000,7 @@ class ZoomableStickerView @JvmOverloads constructor(
     private fun maybeAddDrawDecorAt(screenX: Float, screenY: Float) {
         val brush = drawDecorBrush ?: return
         val point = screenToCanvasPoint(screenX, screenY) ?: return
-        val spacing = (currentBitmap?.width ?: 0) * brush.widthRatio * 0.8f
+        val spacing = baseWidth() * brush.widthRatio * 0.8f
         val dx = point.x - lastDrawCanvasX
         val dy = point.y - lastDrawCanvasY
         if (dx * dx + dy * dy >= spacing * spacing) {
@@ -830,15 +1040,14 @@ class ZoomableStickerView @JvmOverloads constructor(
 
 
 
-                if (drawDecorBrush != null && currentBitmap != null) {
+                if (drawDecorBrush != null && hasContent()) {
                     currentDrawStrokeIds = mutableListOf()
                     isDrawingDecorStroke = addDrawDecorAt(event.x, event.y)
                     isPanning = false
                     return true
                 }
 
-                val hitLayer = getLayerAt(event.x, event.y)
-                // Bắt sự kiện Double Tap vào Decor (nếu Decor đó là chữ)
+                // Chữ/decor của project đã được đồng bộ vào decorItems nên dùng chung luồng hit-test bên dưới.
                 val hitDecorForTap = getDecorAt(event.x, event.y)
 
                 if (hitDecorForTap != null && hitDecorForTap.textContent != null) {
@@ -850,26 +1059,25 @@ class ZoomableStickerView @JvmOverloads constructor(
                     lastTappedLayerId = hitDecorForTap.id
                 }
 
-                if (hitLayer != null) {
-                    val currentTime = System.currentTimeMillis()
-                    // Bắt sự kiện Double Tap dưới 300ms vào cùng 1 TextLayer
-                    if (hitLayer.id == lastTappedLayerId && (currentTime - lastTapTimeMs) < 300) {
-                        if (hitLayer is TextLayer) {
-                            onTextLayerDoubleTapped?.invoke(hitLayer)
-                        }
-                    }
-                    lastTapTimeMs = currentTime
-                    lastTappedLayerId = hitLayer.id
-                }
-
                 val sel = selectedDecor
 
                 // Ưu tiên 1: Nhấn vào nhóm action (nhân bản/xoá)
                 val action = sel?.let { getDecorActionAt(it, event.x, event.y) }
                 if (sel != null && action != null) {
                     when (action) {
-                        DecorAction.DUPLICATE -> duplicateDecor(sel)
+                        DecorAction.DUPLICATE -> {
+                            if (isProjectMode()) {
+                                val newId = java.util.UUID.randomUUID().toString()
+                                val offset = 24f * resources.displayMetrics.density /
+                                        currentMatrixScale().coerceAtLeast(0.01f)
+                                pendingSelectId = newId
+                                onLayerDuplicated?.invoke(sel.id, newId, sel.x + offset, sel.y + offset)
+                            } else {
+                                duplicateDecor(sel)
+                            }
+                        }
                         DecorAction.DELETE -> {
+                            if (isProjectMode()) onLayerDeleted?.invoke(sel.id)
                             decorItems.remove(sel)
                             selectedDecor = null
                             invalidate()
@@ -892,10 +1100,11 @@ class ZoomableStickerView @JvmOverloads constructor(
                         )
                         handleDragStartDistance = kotlin.math.sqrt(
                             ((event.x - center[0]) * (event.x - center[0]) +
-                             (event.y - center[1]) * (event.y - center[1])).toDouble()
+                                    (event.y - center[1]) * (event.y - center[1])).toDouble()
                         ).toFloat().coerceAtLeast(1f)
                         handleDragStartRotation = sel.rotation
                         handleDragStartScale = sel.scale
+                        gestureSnapshot = floatArrayOf(sel.x, sel.y, sel.scale, sel.rotation)
                         return true
                     }
                 }
@@ -912,6 +1121,7 @@ class ZoomableStickerView @JvmOverloads constructor(
                     isDecorMultiTouch = false
                     lastTouchX = event.x
                     lastTouchY = event.y
+                    gestureSnapshot = floatArrayOf(hitDecor.x, hitDecor.y, hitDecor.scale, hitDecor.rotation)
                     invalidate()
                     return true
                 } else {
@@ -956,7 +1166,7 @@ class ZoomableStickerView @JvmOverloads constructor(
                     )
                     val currentDistance = kotlin.math.sqrt(
                         ((event.x - center[0]) * (event.x - center[0]) +
-                         (event.y - center[1]) * (event.y - center[1])).toDouble()
+                                (event.y - center[1]) * (event.y - center[1])).toDouble()
                     ).toFloat().coerceAtLeast(1f)
 
                     // Xoay
@@ -1046,11 +1256,40 @@ class ZoomableStickerView @JvmOverloads constructor(
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 if (isDrawingDecorStroke) {
                     if (currentDrawStrokeIds.isNotEmpty()) {
-                        drawStrokeHistory.add(currentDrawStrokeIds.toList())
+                        val brush = drawDecorBrush
+                        if (isProjectMode() && brush != null) {
+                            // Project: mỗi con dấu trở thành 1 DecorationLayer được lưu + undo được
+                            val cw = baseWidth()
+                            val ids = currentDrawStrokeIds.toHashSet()
+                            val stamps = decorItems.filter { it.id in ids }.map {
+                                preloadedIds.add(it.id)
+                                layerBitmaps[it.id] = it.bitmap
+                                StampSpec(it.id, it.x, it.y, it.width * it.scale / (cw * 0.45f))
+                            }
+                            if (stamps.isNotEmpty()) onDecorStampsCommitted?.invoke(brush.bitmap, stamps)
+                        } else {
+                            drawStrokeHistory.add(currentDrawStrokeIds.toList())
+                        }
                     }
                     currentDrawStrokeIds = mutableListOf()
                     isDrawingDecorStroke = false
                 }
+                // Kết thúc kéo/xoay/phóng 1 layer -> báo ra ngoài để lưu vào lịch sử
+                if (isProjectMode() && (isDraggingDecor || isDraggingHandle)) {
+                    val d = selectedDecor
+                    val snap = gestureSnapshot
+                    // Reset cờ TRƯỚC khi báo ra ngoài: state mới có thể được áp dụng đồng bộ và syncLayerItems
+                    // sẽ bỏ qua nếu vẫn còn cờ đang kéo.
+                    isDraggingDecor = false
+                    isDraggingHandle = false
+                    isDecorMultiTouch = false
+                    if (d != null && snap != null) {
+                        val changed = Math.abs(d.x - snap[0]) > 0.01f || Math.abs(d.y - snap[1]) > 0.01f ||
+                                Math.abs(d.scale - snap[2]) > 0.001f || Math.abs(d.rotation - snap[3]) > 0.01f
+                        if (changed) onLayerTransformed?.invoke(d.id, d.x, d.y, d.scale, d.rotation)
+                    }
+                }
+                gestureSnapshot = null
                 isPanning = false
                 isDraggingDecor = false
                 isDraggingHandle = false
@@ -1121,12 +1360,12 @@ class ZoomableStickerView @JvmOverloads constructor(
             existingDecor.height = existingDecor.width / aspect
         } else {
             // Thêm mới
-            val curr = currentBitmap ?: return
+            if (!hasContent()) return
             val decor = createDecorState(
                 id = idToUse,
                 bitmap = textBitmap,
-                x = curr.width / 2f,
-                y = curr.height / 2f,
+                x = baseWidth() / 2f,
+                y = baseHeight() / 2f,
                 widthRatio = 0.45f
             )
             decor.textContent = text
@@ -1157,38 +1396,5 @@ class ZoomableStickerView @JvmOverloads constructor(
         val values = FloatArray(9)
         displayMatrix.getValues(values)
         return values[Matrix.MSCALE_X]
-    }
-    // Hàm kiểm tra xem điểm chạm (touchX, touchY) có nằm trong vùng của Layer không
-    private fun getLayerAt(touchX: Float, touchY: Float): Layer? {
-        val content = projectContent ?: return null
-        val currentScale = currentMatrixScale()
-
-        // Duyệt từ trên xuống (layer vẽ sau cùng nằm ở trên cùng)
-        for (i in content.layers.indices.reversed()) {
-            val layer = content.layers[i]
-            if (!layer.visible) continue
-
-            val tf = layer.transform
-            // Tính tọa độ trung tâm layer trên màn hình
-            val pts = floatArrayOf(tf.cx, tf.cy)
-            displayMatrix.mapPoints(pts)
-            val screenX = pts[0]
-            val screenY = pts[1]
-
-            // Ước lượng kích thước bounding box của layer
-            val boxWidth = 300f * tf.scale * currentScale
-            val boxHeight = 150f * tf.scale * currentScale
-
-            val localX = touchX - screenX
-            val localY = touchY - screenY
-            val rad = Math.toRadians(-tf.rotationDeg.toDouble())
-            val rotX = (localX * Math.cos(rad) - localY * Math.sin(rad)).toFloat()
-            val rotY = (localX * Math.sin(rad) + localY * Math.cos(rad)).toFloat()
-
-            if (rotX in -boxWidth/2f..boxWidth/2f && rotY in -boxHeight/2f..boxHeight/2f) {
-                return layer
-            }
-        }
-        return null
     }
 }

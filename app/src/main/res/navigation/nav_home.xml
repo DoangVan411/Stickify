@@ -17,4 +17,10 @@
         android:label="@string/tab_collection"
         tools:layout="@layout/fragment_collection" />
 
+    <fragment
+        android:id="@+id/assetFragment"
+        android:name="com.jetpack.stickify.presentation.ui.asset.AssetFragment"
+        android:label="@string/tab_resources"
+        tools:layout="@layout/fragment_asset" />
+
 </navigation>

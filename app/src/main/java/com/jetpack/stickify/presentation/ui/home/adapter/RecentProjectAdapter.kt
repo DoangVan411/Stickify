@@ -5,6 +5,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
+import android.widget.PopupWindow
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
@@ -15,13 +16,19 @@ import com.jetpack.stickify.domain.model.ProjectEntity
 import com.jetpack.stickify.domain.model.ProjectType
 import java.io.File
 
+enum class RecentAction {
+    TOGGLE_FAVORITE,
+    RENAME,
+    DELETE
+}
+
 /**
  * Adapter cho danh sách project gần đây (horizontal RecyclerView).
  * Binding dữ liệu thumbnailPath, name, updatedAt và gửi projectId qua onItemClick.
  */
 class RecentProjectAdapter(
     private val onItemClick: (projectId: String) -> Unit = {},
-    private val onMoreClick: (project: ProjectEntity) -> Unit = {}
+    private val onActionClick: (project: ProjectEntity, action: RecentAction) -> Unit = { _, _ -> }
 ) : ListAdapter<ProjectEntity, RecentProjectAdapter.ViewHolder>(DiffCallback()) {
 
     private var calculatedItemWidth: Int = 0
@@ -97,8 +104,58 @@ class RecentProjectAdapter(
                 ivThumbnail.setImageResource(getPlaceholderDrawable(project.thumbnailPath))
             }
 
-            ivMore.setOnClickListener { onMoreClick(project) }
+            ivMore.setOnClickListener { view ->
+                showPopupMenu(view, project)
+            }
             itemView.setOnClickListener { onItemClick(project.id) }
+        }
+
+        private fun showPopupMenu(anchorView: View, project: ProjectEntity) {
+            val context = anchorView.context
+            val inflater = LayoutInflater.from(context)
+            val popupView = inflater.inflate(R.layout.popup_recent_menu, null)
+
+            val popupWindow = PopupWindow(
+                popupView,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                true
+            ).apply {
+                elevation = 5f * context.resources.displayMetrics.density
+                isOutsideTouchable = true
+                isFocusable = true
+            }
+
+            val btnFavorite = popupView.findViewById<View>(R.id.btnFavorite)
+            val tvFavoriteText = popupView.findViewById<TextView>(R.id.tvFavoriteText)
+            val ivFavoriteIcon = popupView.findViewById<ImageView>(R.id.ivFavoriteIcon)
+            val btnRename = popupView.findViewById<View>(R.id.btnRename)
+            val btnDelete = popupView.findViewById<View>(R.id.btnDelete)
+
+            if (project.isBookmarked) {
+                tvFavoriteText.setText(R.string.action_unfavorite)
+                ivFavoriteIcon.setImageResource(R.drawable.ic_bookmark)
+            } else {
+                tvFavoriteText.setText(R.string.action_favorite)
+                ivFavoriteIcon.setImageResource(R.drawable.ic_favorite_border)
+            }
+
+            btnFavorite.setOnClickListener {
+                popupWindow.dismiss()
+                onActionClick(project, RecentAction.TOGGLE_FAVORITE)
+            }
+
+            btnRename.setOnClickListener {
+                popupWindow.dismiss()
+                onActionClick(project, RecentAction.RENAME)
+            }
+
+            btnDelete.setOnClickListener {
+                popupWindow.dismiss()
+                onActionClick(project, RecentAction.DELETE)
+            }
+
+            popupWindow.showAsDropDown(anchorView, -120, 0)
         }
 
         private fun getRelativeTime(timestamp: Long): String {

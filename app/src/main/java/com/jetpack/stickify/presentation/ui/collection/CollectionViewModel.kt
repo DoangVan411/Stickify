@@ -2,6 +2,9 @@ package com.jetpack.stickify.presentation.ui.collection
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.jetpack.stickify.domain.repository.ProjectRepository
+import com.jetpack.stickify.domain.usecase.DeleteStickerPackUseCase
+import com.jetpack.stickify.domain.usecase.ExportToWhatsAppUseCase
 import com.jetpack.stickify.domain.usecase.GetFavoritesUseCase
 import com.jetpack.stickify.domain.usecase.GetStickerPacksUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,7 +21,10 @@ import javax.inject.Inject
 @HiltViewModel
 class CollectionViewModel @Inject constructor(
     private val getFavoritesUseCase: GetFavoritesUseCase,
-    private val getStickerPacksUseCase: GetStickerPacksUseCase
+    private val getStickerPacksUseCase: GetStickerPacksUseCase,
+    private val exportToWhatsAppUseCase: ExportToWhatsAppUseCase,
+    private val deleteStickerPackUseCase: DeleteStickerPackUseCase,
+    private val projectRepository: ProjectRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CollectionUiState(isLoading = true))
@@ -44,6 +50,56 @@ class CollectionViewModel @Inject constructor(
                     favorites = favorites,
                     stickerPacks = packs
                 )
+            }
+        }
+    }
+
+    fun exportToWhatsApp(packId: String, onResult: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            val result = exportToWhatsAppUseCase(packId)
+            result.onSuccess {
+                onResult(true, null)
+            }.onFailure { e ->
+                onResult(false, e.message ?: "Không thể xuất sang WhatsApp. Hãy đảm bảo WhatsApp đã được cài đặt trên thiết bị.")
+            }
+        }
+    }
+
+    fun deletePack(packId: String) {
+        viewModelScope.launch {
+            val result = deleteStickerPackUseCase(packId)
+            result.onSuccess {
+                loadCollectionData()
+            }
+        }
+    }
+
+    fun updateProjectName(projectId: String, newName: String) {
+        viewModelScope.launch {
+            val result = projectRepository.updateProjectName(projectId, newName)
+            result.onSuccess {
+                loadCollectionData()
+            }
+        }
+    }
+
+    fun deleteProject(projectId: String) {
+        viewModelScope.launch {
+            val result = projectRepository.deleteProject(projectId)
+            result.onSuccess {
+                loadCollectionData()
+            }
+        }
+    }
+
+    fun addStickerToPack(packId: String, stickerId: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val result = projectRepository.addStickerToPack(packId, stickerId)
+            result.onSuccess {
+                loadCollectionData()
+                onResult(true)
+            }.onFailure {
+                onResult(false)
             }
         }
     }

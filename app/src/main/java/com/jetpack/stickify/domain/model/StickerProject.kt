@@ -11,5 +11,6 @@ data class StickerProject(
     val createdAt: Long,
     val updatedAt: Long,
     val content: ProjectContent,
-    val history: EditHistory = EditHistory()
+    val history: EditHistory = EditHistory(),
+    val isBookmarked: Boolean = false,
 )

@@ -11,12 +11,14 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.widget.ImageViewCompat
 import androidx.navigation.NavController
 import androidx.navigation.fragment.NavHostFragment
+import com.google.android.material.behavior.HideBottomViewOnScrollBehavior
 import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.ActivityHomeBinding
 import com.jetpack.stickify.presentation.ui.gallery.GalleryActivity
@@ -86,6 +88,10 @@ class HomeActivity : AppCompatActivity() {
 
     private fun selectTab(tab: BottomNavTab) {
         currentTab = tab
+
+        @Suppress("UNCHECKED_CAST")
+        val behavior = (binding.layoutBottomBar.layoutParams as? CoordinatorLayout.LayoutParams)?.behavior as? HideBottomViewOnScrollBehavior<LinearLayout>
+        behavior?.slideUp(binding.layoutBottomBar)
 
         val primaryColor = ContextCompat.getColor(this, R.color.colorPrimary)
         val unselectedColor = ContextCompat.getColor(this, R.color.text_border_75)

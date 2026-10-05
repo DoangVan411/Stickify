@@ -1,12 +1,17 @@
 package com.jetpack.stickify.domain.model
 
-/**
- * Model cho bộ sticker (sticker pack) trong Bộ sưu tập.
- */
 data class StickerPack(
     val id: String,
     val name: String,
-    val itemCount: Int,
-    val type: ProjectType = ProjectType.STICKER,
-    val previewIcons: List<Int> = emptyList()
-)
+    val author: String = "Stickify",
+    val trayImagePath: String = "", // Ảnh đại diện khay sticker (Yêu cầu bắt buộc của WhatsApp)
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+    val stickers: List<StickerProject> = emptyList() // Quan hệ 0..* như trong UML
+) {
+    val itemCount: Int
+        get() = stickers.size
+
+    val type: ProjectType
+        get() = stickers.firstOrNull()?.type ?: ProjectType.STICKER
+}

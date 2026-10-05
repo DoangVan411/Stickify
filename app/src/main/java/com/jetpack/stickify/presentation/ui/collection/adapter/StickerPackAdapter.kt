@@ -4,22 +4,25 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
+import android.widget.PopupWindow
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
 import com.jetpack.stickify.R
 import com.jetpack.stickify.domain.model.ProjectType
 import com.jetpack.stickify.domain.model.StickerPack
 
-/**
- * Adapter cho danh sách bộ sticker (Grid 2 cột).
- * Vị trí đầu tiên (position 0) là ô nét đứt [+] Thêm bộ sticker mới.
- */
+enum class PackAction {
+    DELETE,
+    EXPORT_TO_WHATSAPP
+}
+
 class StickerPackAdapter(
     private val onCreatePackClick: () -> Unit = {},
     private val onPackClick: (StickerPack) -> Unit = {},
-    private val onMoreClick: (StickerPack) -> Unit = {}
+    private val onActionClick: (StickerPack, PackAction) -> Unit = { _, _ -> }
 ) : ListAdapter<StickerPack, RecyclerView.ViewHolder>(DiffCallback()) {
 
     companion object {
@@ -66,6 +69,16 @@ class StickerPackAdapter(
         private val tvPackCount: TextView = itemView.findViewById(R.id.tvPackCount)
         private val ivMore: ImageView = itemView.findViewById(R.id.ivPackMore)
 
+        // Khởi tạo List chứa 6 ImageView preview
+        private val previewViews: List<ImageView> = listOf(
+            itemView.findViewById(R.id.ivPreview1),
+            itemView.findViewById(R.id.ivPreview2),
+            itemView.findViewById(R.id.ivPreview3),
+            itemView.findViewById(R.id.ivPreview4),
+            itemView.findViewById(R.id.ivPreview5),
+            itemView.findViewById(R.id.ivPreview6)
+        )
+
         fun bind(pack: StickerPack) {
             tvPackName.text = pack.name
 
@@ -76,8 +89,59 @@ class StickerPackAdapter(
             }
             tvPackCount.text = countText
 
+            // Xử lý load 6 ảnh preview cho bộ sticker
+            for (i in previewViews.indices) {
+                val iv = previewViews[i]
+                val sticker = pack.stickers.getOrNull(i)
+
+                if (sticker?.thumbnailPath != null) {
+                    Glide.with(itemView.context)
+                        .load(sticker.thumbnailPath)
+                        .into(iv)
+                } else {
+                    // Cần clear ảnh trên ImageView bị tái sử dụng để tránh lỗi hiển thị nhầm
+                    Glide.with(itemView.context).clear(iv)
+                    iv.setImageDrawable(null)
+                }
+            }
+
             itemView.setOnClickListener { onPackClick(pack) }
-            ivMore.setOnClickListener { onMoreClick(pack) }
+
+            ivMore.setOnClickListener { view ->
+                showPopupMenu(view, pack)
+            }
+        }
+
+        private fun showPopupMenu(anchorView: View, pack: StickerPack) {
+            val context = anchorView.context
+            val inflater = LayoutInflater.from(context)
+            val popupView = inflater.inflate(R.layout.popup_pack_menu, null)
+
+            val popupWindow = PopupWindow(
+                popupView,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                true
+            ).apply {
+                elevation = 5f * context.resources.displayMetrics.density
+                isOutsideTouchable = true
+                isFocusable = true
+            }
+
+            val btnWhatsApp = popupView.findViewById<View>(R.id.btnWhatsApp)
+            val btnDeletePack = popupView.findViewById<View>(R.id.btnDeletePack)
+
+            btnWhatsApp.setOnClickListener {
+                popupWindow.dismiss()
+                onActionClick(pack, PackAction.EXPORT_TO_WHATSAPP)
+            }
+
+            btnDeletePack.setOnClickListener {
+                popupWindow.dismiss()
+                onActionClick(pack, PackAction.DELETE)
+            }
+
+            popupWindow.showAsDropDown(anchorView, -120, 0)
         }
     }
 

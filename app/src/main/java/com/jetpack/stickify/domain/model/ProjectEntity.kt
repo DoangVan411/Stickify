@@ -19,7 +19,7 @@ data class ProjectEntity(
     val exportedPath: String? = null,
     val createdAt: Long,
     val updatedAt: Long,
+    val isBookmarked: Boolean = false,
     val contentJson: String? = null,
     val historyJson: String? = null
 )
-

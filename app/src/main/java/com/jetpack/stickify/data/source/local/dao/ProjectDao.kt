@@ -32,6 +32,18 @@ interface ProjectDao {
     @Query("UPDATE projects SET thumbnailPath = :thumbnailPath, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updateThumbnailAndTimestamp(id: String, thumbnailPath: String, updatedAt: Long)
 
+    @Query("UPDATE projects SET name = :name, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateProjectName(id: String, name: String, updatedAt: Long)
+
     @Query("DELETE FROM projects WHERE id = :id")
     suspend fun deleteProjectById(id: String)
+
+    @Query("SELECT * FROM projects WHERE isBookmarked = 1 ORDER BY updatedAt DESC")
+    suspend fun getFavoriteProjects(): List<ProjectEntity>
+
+    @Query("UPDATE projects SET isBookmarked = :isBookmarked WHERE id = :id")
+    suspend fun updateBookmarkStatus(id: String, isBookmarked: Boolean)
+
+    @Query("SELECT * FROM projects WHERE id IN (:ids)")
+    suspend fun getProjectsByIds(ids: List<String>): List<ProjectEntity>
 }

@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -23,15 +22,20 @@ import com.jetpack.stickify.domain.model.StickerStyle
 import com.jetpack.stickify.presentation.ui.edit_sticker.border.BorderToolFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.custom_view.EditorPanelView
 import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorToolFragment
-import com.jetpack.stickify.presentation.ui.edit_sticker.decoration.DecorationFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.effect.EffectToolFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.suggestion.SuggestionFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextToolFragment
-import com.jetpack.stickify.domain.model.StickerStyle
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.Typeface
 import android.view.Gravity
+import android.view.inputmethod.InputMethodManager
+import androidx.activity.OnBackPressedCallback
+import com.jetpack.stickify.domain.model.BorderStyle
+import com.jetpack.stickify.domain.model.StickerAnimationType
+import com.jetpack.stickify.domain.model.SubjectLayer
 import com.jetpack.stickify.domain.model.TextAlign
+import com.jetpack.stickify.presentation.ui.edit_sticker.cancel.SaveConfirmDialogFragment
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 

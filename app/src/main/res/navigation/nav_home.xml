@@ -11,4 +11,10 @@
         android:label="@string/tab_home"
         tools:layout="@layout/fragment_home" />
 
+    <fragment
+        android:id="@+id/collectionFragment"
+        android:name="com.jetpack.stickify.presentation.ui.collection.CollectionFragment"
+        android:label="@string/tab_collection"
+        tools:layout="@layout/fragment_collection" />
+
 </navigation>

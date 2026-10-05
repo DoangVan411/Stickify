@@ -124,7 +124,9 @@ class HomeActivity : AppCompatActivity() {
                 }
             }
             BottomNavTab.COLLECTION -> {
-                Toast.makeText(this, getString(R.string.tab_collection), Toast.LENGTH_SHORT).show()
+                if (navController.currentDestination?.id != R.id.collectionFragment) {
+                    navController.navigate(R.id.collectionFragment)
+                }
             }
             BottomNavTab.RESOURCES -> {
                 Toast.makeText(this, getString(R.string.tab_resources), Toast.LENGTH_SHORT).show()

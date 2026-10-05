@@ -20,7 +20,10 @@
         android:theme="@style/Theme.Stickify">
         <activity
             android:name=".presentation.ui.edit_sticker.StickerEditActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"
+            android:screenOrientation="portrait"
+            />
         <activity
             android:name=".presentation.ui.gallery.GalleryActivity"
             android:exported="false" />

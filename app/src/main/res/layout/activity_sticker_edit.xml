@@ -197,6 +197,11 @@
 
         </androidx.core.widget.NestedScrollView>
 
+        <include
+            android:id="@+id/addTextLayout"
+            layout="@layout/layout_add_text"
+            />
+
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

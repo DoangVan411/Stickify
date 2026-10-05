@@ -84,4 +84,5 @@
     <string name="btn_edit">Chỉnh sửa</string>
     <string name="btn_continue">Tiếp tục</string>
     <string name="select_image_or_video">Chọn ảnh hoặc video</string>
+    <string name="press_somethign">Nhập gì đó...</string>
 </resources>

@@ -1,22 +1,157 @@
 <?xml version="1.0" encoding="utf-8"?>
-
-<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="12dp"
+    android:layout_marginBottom="12dp"
+    app:cardBackgroundColor="@android:color/white"
+    app:cardCornerRadius="20dp"
+    app:cardElevation="6dp">
 
-
-    <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-        xmlns:tools="http://schemas.android.com/tools"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        tools:context=".presentation.ui.edit_sticker.text.TextToolFragment">
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
 
-        <!-- TODO: Update blank fragment layout -->
         <TextView
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:text="Edit Text" />
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Vẽ trang trí"
+            android:textColor="#111111"
+            android:textSize="14sp" />
 
-    </FrameLayout>
-</androidx.core.widget.NestedScrollView>
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <FrameLayout
+                    android:id="@+id/decorItem1"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:layout_marginEnd="10dp"
+                    android:padding="4dp">
+
+                    <View
+                        android:id="@+id/decorSelectedFrame1"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bg_decor_item_selected"
+                        android:visibility="gone" />
+
+                    <ImageView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_margin="5dp"
+                        android:adjustViewBounds="true"
+                        android:background="@drawable/bg_style_thumb_frame_selected"
+                        android:padding="4dp"
+                        android:src="@drawable/img_decorate_01" />
+                </FrameLayout>
+
+                <FrameLayout
+                    android:id="@+id/decorItem2"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:layout_marginEnd="10dp"
+                    android:padding="4dp">
+
+                    <View
+                        android:id="@+id/decorSelectedFrame2"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bg_decor_item_selected"
+                        android:visibility="gone" />
+
+                    <ImageView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_margin="5dp"
+                        android:adjustViewBounds="true"
+                        android:background="@drawable/bg_style_thumb_frame_selected"
+                        android:padding="4dp"
+                        android:src="@drawable/img_decorate_02" />
+                </FrameLayout>
+
+                <FrameLayout
+                    android:id="@+id/decorItem3"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:layout_marginEnd="10dp"
+                    android:padding="4dp">
+
+                    <View
+                        android:id="@+id/decorSelectedFrame3"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bg_decor_item_selected"
+                        android:visibility="gone" />
+
+                    <ImageView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_margin="5dp"
+                        android:adjustViewBounds="true"
+                        android:background="@drawable/bg_style_thumb_frame_selected"
+                        android:padding="4dp"
+                        android:src="@drawable/img_decorate_03" />
+                </FrameLayout>
+
+                <FrameLayout
+                    android:id="@+id/decorItem4"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:layout_marginEnd="10dp"
+                    android:padding="4dp">
+
+                    <View
+                        android:id="@+id/decorSelectedFrame4"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bg_decor_item_selected"
+                        android:visibility="gone" />
+
+                    <ImageView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_margin="5dp"
+                        android:adjustViewBounds="true"
+                        android:background="@drawable/bg_style_thumb_frame_selected"
+                        android:padding="4dp"
+                        android:src="@drawable/img_decorate_04" />
+                </FrameLayout>
+
+                <FrameLayout
+                    android:id="@+id/decorItem5"
+                    android:layout_width="64dp"
+                    android:layout_height="64dp"
+                    android:padding="4dp">
+
+                    <View
+                        android:id="@+id/decorSelectedFrame5"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/bg_decor_item_selected"
+                        android:visibility="gone" />
+
+                    <ImageView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_margin="5dp"
+                        android:adjustViewBounds="true"
+                        android:background="@drawable/bg_style_thumb_frame_selected"
+                        android:padding="4dp"
+                        android:src="@drawable/img_decorate_05" />
+                </FrameLayout>
+            </LinearLayout>
+        </HorizontalScrollView>
+    </LinearLayout>
+</androidx.cardview.widget.CardView>

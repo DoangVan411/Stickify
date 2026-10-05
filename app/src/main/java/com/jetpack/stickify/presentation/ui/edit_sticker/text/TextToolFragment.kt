@@ -21,7 +21,6 @@ class TextToolFragment : Fragment() {
     // TODO: Rename and change types of parameters
     private var param1: String? = null
     private var param2: String? = null
-    private var selectedDecorIndex: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,49 +38,7 @@ class TextToolFragment : Fragment() {
         return inflater.inflate(R.layout.fragment_text_tool, container, false)
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        selectedDecorIndex = savedInstanceState?.getInt(KEY_SELECTED_DECOR_INDEX) ?: selectedDecorIndex
-        setupDecorSelection(view)
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        outState.putInt(KEY_SELECTED_DECOR_INDEX, selectedDecorIndex)
-    }
-
-    private fun setupDecorSelection(root: View) {
-        val itemIds = intArrayOf(
-            R.id.decorItem1, R.id.decorItem2, R.id.decorItem3, R.id.decorItem4, R.id.decorItem5
-        )
-        val frameIds = intArrayOf(
-            R.id.decorSelectedFrame1,
-            R.id.decorSelectedFrame2,
-            R.id.decorSelectedFrame3,
-            R.id.decorSelectedFrame4,
-            R.id.decorSelectedFrame5
-        )
-
-        fun updateSelectedUi(index: Int) {
-            if (index !in frameIds.indices) return
-            selectedDecorIndex = index
-            frameIds.forEachIndexed { frameIndex, frameId ->
-                root.findViewById<View>(frameId).visibility =
-                    if (frameIndex == selectedDecorIndex) View.VISIBLE else View.GONE
-            }
-        }
-
-        itemIds.forEachIndexed { index, itemId ->
-            root.findViewById<View>(itemId).setOnClickListener {
-                updateSelectedUi(index)
-            }
-        }
-
-        updateSelectedUi(selectedDecorIndex)
-    }
-
     companion object {
-        private const val KEY_SELECTED_DECOR_INDEX = "selected_decor_index"
         /**
          * Use this factory method to create a new instance of
          * this fragment using the provided parameters.

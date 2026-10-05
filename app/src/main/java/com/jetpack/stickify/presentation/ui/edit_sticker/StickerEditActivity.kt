@@ -19,6 +19,7 @@ import androidx.lifecycle.lifecycleScope
 import com.jetpack.stickify.data.processor.StickerStyleProcessor
 import com.jetpack.stickify.databinding.ActivityStickerEditBinding
 import com.jetpack.stickify.presentation.ui.edit_sticker.custom_view.EditorPanelView
+import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorToolFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.suggestion.SuggestionFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextToolFragment
 import dagger.hilt.android.AndroidEntryPoint
@@ -51,6 +52,7 @@ class StickerEditActivity : AppCompatActivity() {
     // Lưu trữ tham chiếu đến các Fragment để thực hiện logic Hide/Show
     private var suggestionFragment: SuggestionFragment? = null
     private var textToolFragment: TextToolFragment? = null
+    private var decorToolFragment: DecorToolFragment? = null
     private var borderToolFragment: BorderToolFragment? = null
 
 
@@ -151,6 +153,7 @@ class StickerEditActivity : AppCompatActivity() {
         // 1. Hide tất cả các fragment hiện có
         suggestionFragment?.let { transaction.hide(it) }
         textToolFragment?.let { transaction.hide(it) }
+        decorToolFragment?.let { transaction.hide(it) }
         borderToolFragment?.let{transaction.hide(it)}
 
         // 2. Show Fragment tương ứng với Position của Tab
@@ -170,6 +173,14 @@ class StickerEditActivity : AppCompatActivity() {
                     transaction.add(R.id.featureContainer, textToolFragment!!, "TEXT_TOOL")
                 } else {
                     transaction.show(textToolFragment!!)
+                }
+            }
+            3 -> {
+                if (decorToolFragment == null) {
+                    decorToolFragment = DecorToolFragment()
+                    transaction.add(R.id.featureContainer, decorToolFragment!!, "DECOR_TOOL")
+                } else {
+                    transaction.show(decorToolFragment!!)
                 }
             }
             4->{

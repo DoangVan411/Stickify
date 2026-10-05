@@ -1,27 +1,28 @@
 package com.jetpack.stickify.presentation.ui.edit_sticker
 
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.ActivityStickerEditBinding
+import com.jetpack.stickify.domain.model.StickerStyle
 import com.jetpack.stickify.presentation.ui.edit_sticker.border.BorderToolFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.custom_view.EditorPanelView
 import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorToolFragment
-import com.jetpack.stickify.presentation.ui.edit_sticker.decoration.DecorationFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.effect.EffectToolFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.suggestion.SuggestionFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextToolFragment
-import com.jetpack.stickify.domain.model.StickerStyle
-import android.graphics.BitmapFactory
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
@@ -174,7 +175,9 @@ class StickerEditActivity : AppCompatActivity() {
             if (decor == null) {
                 binding.zoomableView.setDrawDecorBrush(null)
             } else {
-                val bitmap = decor.customBitmap ?: BitmapFactory.decodeResource(resources, decor.resId)
+                val bitmap = decor.customBitmap ?: runCatching {
+                    BitmapFactory.decodeResource(resources, decor.resId)
+                }.getOrNull() ?: ContextCompat.getDrawable(this, decor.resId)?.toBitmap()
                 binding.zoomableView.setDrawDecorBrush(bitmap, decor.id)
             }
         }
@@ -199,12 +202,12 @@ class StickerEditActivity : AppCompatActivity() {
         binding.btnBack.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
 
         binding.btnUndo.setOnClickListener {
+            if (binding.zoomableView.undoLastDrawDecorStroke()) {
+                return@setOnClickListener
+            }
             if (currentProjectId != null) {
                 editViewModel.undo()
             } else {
-                if (binding.zoomableView.undoLastDrawDecorStroke()) {
-                    return@setOnClickListener
-                }
                 sharedViewModel.moveHistory(-1)
             }
         }

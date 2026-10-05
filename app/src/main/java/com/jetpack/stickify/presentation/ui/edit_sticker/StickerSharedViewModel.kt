@@ -48,6 +48,8 @@ class StickerSharedViewModel @Inject constructor(
     private val _historyState = MutableLiveData<Pair<Boolean, Boolean>>()
     val historyState: LiveData<Pair<Boolean, Boolean>> get() = _historyState
 
+    private val _drawDecorModeEvent = MutableLiveData(false)
+    val drawDecorModeEvent: LiveData<Boolean> get() = _drawDecorModeEvent
 
     //border
     val currentBorderThickness = MutableLiveData<Int>(30)
@@ -132,6 +134,10 @@ class StickerSharedViewModel @Inject constructor(
 
     private fun updateHistoryState() {
         _historyState.value = Pair(historyIndex > 0, historyIndex < history.size - 1)
+    }
+
+    fun setDrawDecorModeEnabled(enabled: Boolean) {
+        _drawDecorModeEvent.value = enabled
     }
 
     private fun createCenterFitThumbnail(source: Bitmap, maxSize: Int): Bitmap {

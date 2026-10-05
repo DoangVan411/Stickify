@@ -41,6 +41,11 @@ class StickerEditActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_CROPPED_IMAGE_URI = "extra_cropped_image_uri"
         const val EXTRA_RESULT_URI = "extra_result_uri"
+        private const val TAB_SUGGESTION = 0
+        private const val TAB_TEXT = 1
+        private const val TAB_EFFECT = 2
+        private const val TAB_DECOR = 3
+        private const val TAB_BORDER = 4
     }
 
     private lateinit var binding: ActivityStickerEditBinding
@@ -147,6 +152,7 @@ class StickerEditActivity : AppCompatActivity() {
     private fun switchFragment(position: Int) {
         val fragmentManager = supportFragmentManager
         val transaction = fragmentManager.beginTransaction()
+        sharedViewModel.setDrawDecorModeEnabled(position == TAB_DECOR)
 
         // 1. Hide tất cả các fragment hiện có
         suggestionFragment?.let { transaction.hide(it) }
@@ -155,7 +161,7 @@ class StickerEditActivity : AppCompatActivity() {
 
         // 2. Show Fragment tương ứng với Position của Tab
         when (position) {
-            0 -> {
+            TAB_SUGGESTION, TAB_EFFECT, TAB_DECOR -> {
                 if (suggestionFragment == null) {
                     suggestionFragment = SuggestionFragment()
                     // Nên định nghĩa một FrameLayout id = featureContainer trong XML Activity
@@ -164,7 +170,7 @@ class StickerEditActivity : AppCompatActivity() {
                     transaction.show(suggestionFragment!!)
                 }
             }
-            1 -> {
+            TAB_TEXT -> {
                 if (textToolFragment == null) {
                     textToolFragment = TextToolFragment() // Bạn cần tạo Fragment này sau
                     transaction.add(R.id.featureContainer, textToolFragment!!, "TEXT_TOOL")
@@ -172,7 +178,7 @@ class StickerEditActivity : AppCompatActivity() {
                     transaction.show(textToolFragment!!)
                 }
             }
-            4->{
+            TAB_BORDER -> {
                 if (borderToolFragment == null) {
                     borderToolFragment = BorderToolFragment() // Bạn cần tạo Fragment này sau
                     transaction.add(R.id.featureContainer, borderToolFragment!!, "BORDER_TOOL")

@@ -146,7 +146,8 @@ class HomeFragment : Fragment() {
 
     private fun setupClickListeners() {
         binding.cardCreateGif.setOnClickListener {
-            Toast.makeText(context, "Tính năng tạo/xuất GIF đang được phát triển", Toast.LENGTH_SHORT).show()
+            val intent = Intent(requireContext(), com.jetpack.stickify.presentation.ui.gallery.GalleryActivity::class.java)
+            startActivity(intent)
         }
         binding.ivCreateGif.setOnClickListener {
             binding.cardCreateGif.performClick()

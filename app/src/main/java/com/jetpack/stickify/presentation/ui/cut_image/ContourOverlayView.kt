@@ -31,7 +31,8 @@ enum class EditTool { NONE, POINTS, BRUSH_ADD, BRUSH_ERASE }
  *
  * - Ảnh mặc định được KHÉO DÃN FULL CHIỀU NGANG (fit-width).
  * - Hỗ trợ pinch-zoom, kéo (pan) bằng 1 ngón (khi không vẽ) hoặc 2 ngón (luôn luôn), double-tap để zoom.
- * - Brush: vẽ tới đâu hiện tới đó (mask + nét vẽ xanh/đỏ + con trỏ brush cập nhật realtime).
+ * - Brush (thêm/xóa): vẽ nét ĐỨT 1.5dp bao quanh vùng cần thêm/xóa. Khi nhấc tay, nét được
+ *   "hút" vào biên thật của ảnh (xem [EdgeSnapper]), khép kín rồi fill vào/ra khỏi mask.
  *
  * Nguồn dữ liệu "chân lý" cho vùng chọn là [selectionMask] (ALPHA_8, cùng kích thước ảnh gốc).
  */
@@ -41,7 +42,11 @@ class ContourOverlayView @JvmOverloads constructor(
 
     private enum class Interaction { NONE, PAN, DRAG_POINT, BRUSH }
 
+    private val dp = resources.displayMetrics.density
+
     private var bitmap: Bitmap? = null
+    @Volatile private var edgeMap: EdgeMap? = null
+    private var edgeToken = 0
     private val imageMatrix = Matrix()
     private val inverseMatrix = Matrix()
 
@@ -67,22 +72,24 @@ class ContourOverlayView @JvmOverloads constructor(
     var currentTool: EditTool = EditTool.NONE
         set(value) {
             field = value
-            lastBrushPoint = null
+            cancelStroke()
             invalidate()
         }
 
-    /** Bán kính brush theo tọa độ ẢNH GỐC. */
-    var brushRadiusPx: Float = 60f
+    /** Bán kính tìm biên để hút nét vẽ vào (dp trên màn hình). */
+    var snapRadiusDp: Float = 14f
 
     private var interaction = Interaction.NONE
     private var draggingIndex: Int = -1
-    private var lastBrushPoint: PointF? = null
     private val touchSlopPx = 48f
 
-    // ---- Live brush preview ----
-    private val strokePath = Path()            // theo tọa độ bitmap
+    // ---- Brush (nét đứt) ----
+    private val rawStroke = ArrayList<PointF>()   // nét vẽ theo tọa độ ảnh gốc
+    private val viewStrokePath = Path()           // nét vẽ theo tọa độ view (để preview)
+    private val closePath = Path()                // đoạn khép kín preview (điểm cuối -> điểm đầu)
+    private var strokeStartView: PointF? = null
+    private var strokeLastView: PointF? = null
     private var isBrushing = false
-    private var cursorView: PointF? = null      // vị trí ngón tay (tọa độ view)
 
     private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG)
 
@@ -110,7 +117,7 @@ class ContourOverlayView @JvmOverloads constructor(
         isFilterBitmap = true
     }
 
-    // Paint vẽ lên mask (FILL cho chấm tròn, linePaint = bản copy dạng STROKE cho đoạn thẳng)
+    // Paint fill lên mask
     private val brushAddPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
         style = Paint.Style.FILL
@@ -119,22 +126,20 @@ class ContourOverlayView @JvmOverloads constructor(
         style = Paint.Style.FILL
         xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
     }
-    private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
-    }
 
-    // Nét vẽ xem trước (xanh = thêm, đỏ = xóa)
-    private val strokePreviewPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    // Nét đứt 1.5dp của brush: lớp bóng đen mờ (để nhìn rõ trên mọi nền) + lớp màu bên trên.
+    private fun brushDashEffect() = DashPathEffect(floatArrayOf(8f * dp, 5f * dp), 0f)
+
+    private val brushShadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeCap = Paint.Cap.ROUND
-        strokeJoin = Paint.Join.ROUND
+        strokeWidth = 3f * dp
+        color = Color.argb(120, 0, 0, 0)
+        pathEffect = brushDashEffect()
     }
-    private val cursorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val brushDashPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 3f
-        color = Color.WHITE
+        strokeWidth = 1.5f * dp
+        pathEffect = brushDashEffect()
     }
 
     private var dashAnimator: ValueAnimator? = null
@@ -170,6 +175,7 @@ class ContourOverlayView @JvmOverloads constructor(
 
     fun setImageBitmap(bmp: Bitmap) {
         bitmap = bmp
+        computeEdgeMapAsync(bmp)
         resetZoom()
         requestLayout()
         invalidate()
@@ -187,6 +193,15 @@ class ContourOverlayView @JvmOverloads constructor(
     }
 
     fun getSelectionMask(): Bitmap? = selectionMask
+
+    private fun computeEdgeMapAsync(bmp: Bitmap) {
+        edgeMap = null
+        val token = ++edgeToken
+        Thread {
+            val map = try { EdgeSnapper.computeEdgeMap(bmp) } catch (e: Throwable) { null }
+            post { if (token == edgeToken) edgeMap = map }
+        }.start()
+    }
 
     fun getContourPointsInBitmapSpace(): List<PointF> = contourPoints.map { PointF(it.x, it.y) }
 
@@ -218,6 +233,7 @@ class ContourOverlayView @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        edgeToken++ // huỷ kết quả edge map đang tính dở
         dashAnimator?.cancel()
     }
 
@@ -286,8 +302,7 @@ class ContourOverlayView @JvmOverloads constructor(
             canvas.restoreToCount(layerId)
         }
 
-        // Đang vẽ brush thì ẩn contour cũ (đã lỗi thời) cho đỡ rối, chỉ hiện lại sau khi nhấc tay.
-        if (contourPoints.size >= 3 && !isBrushing) {
+        if (contourPoints.size >= 3) {
             val viewPoints = contourPoints.map { mapBitmapToView(it) }
             val smoothPath = ContourUtils.buildSmoothClosedPath(viewPoints)
             canvas.drawPath(smoothPath, dashPaint)
@@ -301,18 +316,25 @@ class ContourOverlayView @JvmOverloads constructor(
         }
 
         if (isBrushing) {
-            // Nét vẽ xem trước, hiện đến đâu vẽ đến đó
-            canvas.save()
-            canvas.concat(imageMatrix)
-            strokePreviewPaint.strokeWidth = brushRadiusPx * 2
-            strokePreviewPaint.color =
-                if (currentTool == EditTool.BRUSH_ADD) Color.argb(110, 76, 175, 80)
-                else Color.argb(110, 244, 67, 54)
-            canvas.drawPath(strokePath, strokePreviewPaint)
-            canvas.restore()
+            brushDashPaint.color =
+                if (currentTool == EditTool.BRUSH_ADD) Color.rgb(76, 175, 80)
+                else Color.rgb(244, 67, 54)
 
-            // Con trỏ brush (bán kính quy đổi ra px màn hình theo zoom)
-            cursorView?.let { canvas.drawCircle(it.x, it.y, brushRadiusPx * currentScale(), cursorPaint) }
+            canvas.drawPath(viewStrokePath, brushShadowPaint)
+            canvas.drawPath(viewStrokePath, brushDashPaint)
+
+            // Đoạn khép kín (mờ hơn) cho user hình dung vùng sẽ được fill.
+            val s0 = strokeStartView
+            val s1 = strokeLastView
+            if (s0 != null && s1 != null && rawStroke.size >= 2) {
+                closePath.reset()
+                closePath.moveTo(s1.x, s1.y)
+                closePath.lineTo(s0.x, s0.y)
+                val oldAlpha = brushDashPaint.alpha
+                brushDashPaint.alpha = 110
+                canvas.drawPath(closePath, brushDashPaint)
+                brushDashPaint.alpha = oldAlpha
+            }
         }
     }
 
@@ -344,7 +366,7 @@ class ContourOverlayView @JvmOverloads constructor(
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
                 // Ngón thứ 2 chạm vào -> chuyển sang zoom/pan, kết thúc thao tác đang làm.
-                endCurrentInteraction()
+                endCurrentInteraction(commit = false)
                 interaction = Interaction.PAN
             }
             MotionEvent.ACTION_MOVE -> when (interaction) {
@@ -353,7 +375,7 @@ class ContourOverlayView @JvmOverloads constructor(
                 else -> Unit
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                endCurrentInteraction()
+                endCurrentInteraction(commit = event.actionMasked == MotionEvent.ACTION_UP)
                 interaction = Interaction.NONE
                 parent?.requestDisallowInterceptTouchEvent(false)
             }
@@ -377,7 +399,7 @@ class ContourOverlayView @JvmOverloads constructor(
         }
     }
 
-    private fun endCurrentInteraction() {
+    private fun endCurrentInteraction(commit: Boolean) {
         when (interaction) {
             Interaction.DRAG_POINT -> {
                 if (draggingIndex != -1) {
@@ -386,7 +408,7 @@ class ContourOverlayView @JvmOverloads constructor(
                 draggingIndex = -1
                 invalidate()
             }
-            Interaction.BRUSH -> endStroke()
+            Interaction.BRUSH -> if (commit) endStroke() else cancelStroke()
             else -> Unit
         }
     }
@@ -412,70 +434,83 @@ class ContourOverlayView @JvmOverloads constructor(
         return bestIndex
     }
 
-    // ---------- Brush (vẽ realtime) ----------
+    // ---------- Brush nét đứt + bám biên ----------
 
     private fun beginStroke(event: MotionEvent) {
-        val canvas = maskCanvas ?: return
+        rawStroke.clear()
+        viewStrokePath.reset()
+
         val p = mapViewToBitmap(event.x, event.y)
         clampToBitmapBounds(p)
+        rawStroke.add(p)
 
+        viewStrokePath.moveTo(event.x, event.y)
+        strokeStartView = PointF(event.x, event.y)
+        strokeLastView = PointF(event.x, event.y)
         isBrushing = true
-        strokePath.reset()
-        strokePath.moveTo(p.x, p.y)
-        strokePath.lineTo(p.x + 0.01f, p.y) // để chấm đơn cũng hiện nét (round cap)
-
-        drawBrushDot(canvas, p)
-        lastBrushPoint = p
-        cursorView = PointF(event.x, event.y)
         invalidate()
     }
 
     private fun continueStroke(event: MotionEvent) {
-        val canvas = maskCanvas ?: return
+        if (!isBrushing) return
         // Dùng cả các điểm lịch sử để nét vẽ mượt khi vẽ nhanh
         for (h in 0 until event.historySize) {
-            appendStrokePoint(canvas, event.getHistoricalX(h), event.getHistoricalY(h))
+            appendStrokePoint(event.getHistoricalX(h), event.getHistoricalY(h))
         }
-        appendStrokePoint(canvas, event.x, event.y)
-        cursorView = PointF(event.x, event.y)
+        appendStrokePoint(event.x, event.y)
         invalidate()
     }
 
-    private fun appendStrokePoint(canvas: Canvas, viewX: Float, viewY: Float) {
+    private fun appendStrokePoint(viewX: Float, viewY: Float) {
         val p = mapViewToBitmap(viewX, viewY)
         clampToBitmapBounds(p)
-        val last = lastBrushPoint
-        if (last != null) {
-            drawBrushLine(canvas, last, p)
-            strokePath.lineTo(p.x, p.y)
-        } else {
-            drawBrushDot(canvas, p)
-            strokePath.moveTo(p.x, p.y)
-        }
-        lastBrushPoint = p
+        val last = rawStroke.lastOrNull()
+        if (last != null && kotlin.math.hypot(p.x - last.x, p.y - last.y) < 0.5f) return
+        rawStroke.add(p)
+        viewStrokePath.lineTo(viewX, viewY)
+        strokeLastView = PointF(viewX, viewY)
+    }
+
+    private fun cancelStroke() {
+        isBrushing = false
+        rawStroke.clear()
+        viewStrokePath.reset()
+        strokeStartView = null
+        strokeLastView = null
+        invalidate()
     }
 
     private fun endStroke() {
-        lastBrushPoint = null
-        isBrushing = false
-        cursorView = null
-        strokePath.reset()
-        retraceContourFromMask() // dò lại polygon 1 lần sau khi nhấc tay để không bị lag
+        val points = ArrayList(rawStroke)
+        cancelStroke()
+        applyStrokeToMask(points)
     }
 
-    private fun drawBrushDot(canvas: Canvas, p: PointF) {
+    /** Hút nét vào biên -> khép kín -> fill (thêm) hoặc clear (xóa) trên mask. */
+    private fun applyStrokeToMask(points: List<PointF>) {
+        val canvas = maskCanvas ?: return
+        if (points.size < 3) return
+
+        var length = 0f
+        for (i in 1 until points.size) {
+            length += kotlin.math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y)
+        }
+        if (length < 10f * dp / currentScale()) return // nét quá ngắn -> bỏ qua
+
+        val radius = (snapRadiusDp * dp / currentScale()).coerceIn(3f, 48f)
+        val edge = edgeMap
+        val snapped = if (edge != null) EdgeSnapper.snapStroke(points, edge, radius) else points
+        if (snapped.size < 3) return
+
+        val region = Path().apply {
+            moveTo(snapped[0].x, snapped[0].y)
+            for (i in 1 until snapped.size) lineTo(snapped[i].x, snapped[i].y)
+            close()
+        }
         val paint = if (currentTool == EditTool.BRUSH_ADD) brushAddPaint else brushErasePaint
-        canvas.drawCircle(p.x, p.y, brushRadiusPx, paint)
-    }
+        canvas.drawPath(region, paint)
 
-    private fun drawBrushLine(canvas: Canvas, from: PointF, to: PointF) {
-        val base = if (currentTool == EditTool.BRUSH_ADD) brushAddPaint else brushErasePaint
-        linePaint.set(base)
-        linePaint.style = Paint.Style.STROKE
-        linePaint.strokeCap = Paint.Cap.ROUND
-        linePaint.strokeJoin = Paint.Join.ROUND
-        linePaint.strokeWidth = brushRadiusPx * 2
-        canvas.drawLine(from.x, from.y, to.x, to.y, linePaint)
+        retraceContourFromMask() // dò lại polygon 1 lần sau khi nhấc tay
     }
 
     // ---------- Đồng bộ polygon <-> mask ----------

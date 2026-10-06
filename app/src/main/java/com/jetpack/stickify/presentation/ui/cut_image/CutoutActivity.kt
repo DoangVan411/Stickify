@@ -1,6 +1,7 @@
 package com.jetpack.stickify.presentation.ui.cut_image
 
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
@@ -8,7 +9,9 @@ import android.view.View
 import android.widget.Button
 import android.widget.ImageButton
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.databinding.DataBindingUtil
@@ -21,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.core.graphics.toColorInt
 import com.jetpack.stickify.presentation.ui.edit_sticker.StickerEditActivity
+import com.jetpack.stickify.presentation.ui.home.HomeActivity
 
 /**
  * Màn hình "Chọn vùng ảnh":
@@ -47,9 +51,9 @@ class CutoutActivity : AppCompatActivity() {
     private lateinit var btnContinue: MaterialButton
     private lateinit var btnBack: ImageButton
     private lateinit var editToolsRow: View
-    private lateinit var btnToolPoints: Button
-    private lateinit var btnToolBrushAdd: Button
-    private lateinit var btnToolBrushErase: Button
+    private lateinit var btnToolPoints: MaterialButton
+    private lateinit var btnToolBrushAdd: MaterialButton
+    private lateinit var btnToolBrushErase: MaterialButton
 
     private var sourceBitmap: Bitmap? = null
     private var isEditMode = false
@@ -87,7 +91,13 @@ class CutoutActivity : AppCompatActivity() {
         btnToolBrushAdd = findViewById(R.id.btnToolBrushAdd)
         btnToolBrushErase = findViewById(R.id.btnToolBrushErase)
 
-        btnBack.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
+        btnBack.setOnClickListener { showExitConfirmationDialog() }
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                showExitConfirmationDialog()
+            }
+        })
 
         btnEdit.setOnClickListener { toggleEditMode() }
         btnToolPoints.setOnClickListener { selectTool(EditTool.POINTS) }
@@ -119,7 +129,7 @@ class CutoutActivity : AppCompatActivity() {
         overlayView.editMode = isEditMode
         btnEdit.text = if (isEditMode) "Xong" else "Chỉnh sửa"
         editToolsRow.visibility = if (isEditMode) View.VISIBLE else View.GONE
-        if (isEditMode) selectTool(EditTool.POINTS) // mặc định vào chế độ kéo điểm trước
+        if (isEditMode) selectTool(EditTool.BRUSH_ADD) // mặc định vào chế độ kéo điểm trước
     }
 
     private fun selectTool(tool: EditTool) {
@@ -131,8 +141,14 @@ class CutoutActivity : AppCompatActivity() {
         val selectedColor = "#2196F3".toColorInt()
         val defaultColor = ContextCompat.getColor(this, R.color.text_border_t300)
 
-        fun style(button: Button, isSelected: Boolean) {
-            button.setTextColor(if (isSelected) selectedColor else defaultColor)
+        fun style(button: MaterialButton, isSelected: Boolean) {
+            val color = if (isSelected) selectedColor else defaultColor
+
+            // 1. Set màu cho chữ
+            button.setTextColor(color)
+
+            // 2. Set màu cho Icon
+            button.iconTint = ColorStateList.valueOf(color)
         }
         style(btnToolPoints, selected == EditTool.POINTS)
         style(btnToolBrushAdd, selected == EditTool.BRUSH_ADD)
@@ -207,5 +223,16 @@ class CutoutActivity : AppCompatActivity() {
                 cutOutBinding.loadingContainer.visibility = View.GONE
             }
         }
+    }
+
+    private fun showExitConfirmationDialog() {
+        val dialog = ExitConfirmDialogFragment.newInstance {
+            val intent = Intent(this, HomeActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+            startActivity(intent)
+            finish()
+        }
+        dialog.show(supportFragmentManager, ExitConfirmDialogFragment.TAG)
     }
 }

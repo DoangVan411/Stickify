@@ -154,7 +154,8 @@ class HomeFragment : Fragment() {
         }
 
         binding.cardCreateSticker.setOnClickListener {
-            // TODO: Navigate to Sticker editor
+            val intent = Intent(requireContext(), com.jetpack.stickify.presentation.ui.gallery.GalleryActivity::class.java)
+            startActivity(intent)
         }
         binding.ivCreateSticker.setOnClickListener {
             binding.cardCreateSticker.performClick()

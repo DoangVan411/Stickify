@@ -20,6 +20,7 @@ import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.ActivityStickerEditBinding
 import com.jetpack.stickify.domain.model.StickerStyle
 import com.jetpack.stickify.presentation.ui.edit_sticker.border.BorderToolFragment
+import com.jetpack.stickify.presentation.ui.edit_sticker.prompt_sticker.AiGlowBorderDrawable
 import com.jetpack.stickify.presentation.ui.edit_sticker.custom_view.EditorPanelView
 import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorToolFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.effect.EffectToolFragment
@@ -39,7 +40,9 @@ import com.jetpack.stickify.domain.model.TextLayer
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextInputOverlayController
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextStyleSpec
 import com.jetpack.stickify.presentation.ui.edit_sticker.cancel.SaveConfirmDialogFragment
+import com.jetpack.stickify.presentation.ui.edit_sticker.utils.PromptKeyboardAdjuster
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -93,12 +96,24 @@ class StickerEditActivity : AppCompatActivity() {
 
     // Thêm biến isNewProject và gán mặc định isProjectMode = true
     private var isNewProject = false
+    private var keyboardAdjuster: PromptKeyboardAdjuster? = null
+
+    // true khi AI đang tạo sticker (hiện viền chạy + lớp phủ tối)
+    private var isAiGenerating = false
+
+    // Viền xanh-cam: gắn làm foreground của promptCard nên luôn bám sát card
+    private lateinit var aiGlow: AiGlowBorderDrawable
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = DataBindingUtil.setContentView(this, R.layout.activity_sticker_edit)
 
+        aiGlow = AiGlowBorderDrawable(this)
+        binding.promptCard.foreground = aiGlow          // viền sắc nét bên trong card
+        binding.aiGlowHalo.target = binding.promptCard  // quầng sóng nhòe ra ngoài card
+
         setupClickListeners()
+        setupKeyboard()
         setupObservers()
         setupTextOverlayLogic() // phải khởi tạo trước tab menu (tab "Chữ" dùng textController)
         setupEditorTabMenu()
@@ -132,6 +147,24 @@ class StickerEditActivity : AppCompatActivity() {
             Toast.makeText(this, "Không nhận được dữ liệu project hoặc ảnh đầu vào", Toast.LENGTH_LONG).show()
             finish()
         }
+    }
+
+    private fun setupKeyboard() {
+        // Khởi tạo và kích hoạt bộ điều chỉnh bàn phím
+        keyboardAdjuster = PromptKeyboardAdjuster(
+            rootView = binding.root,
+            targetView = binding.promptCard,
+            focusView = binding.etPrompt,
+            bottomMarginDp = 10
+        ).apply {
+            attach()
+        }
+    }
+
+    override fun onDestroy() {
+        if (::aiGlow.isInitialized) aiGlow.release()
+        binding.aiGlowHalo.release()
+        super.onDestroy()
     }
 
     override fun onStop() {
@@ -343,8 +376,62 @@ class StickerEditActivity : AppCompatActivity() {
         }
 
         binding.btnSendPrompt.setOnClickListener {
-            Toast.makeText(this, "Tính năng tạo sticker AI đang được phát triển", Toast.LENGTH_SHORT).show()
+            val prompt = binding.etPrompt.text?.toString()?.trim().orEmpty()
+            if (prompt.isEmpty()) {
+                Toast.makeText(this, "Hãy nhập mô tả cho sticker", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (isAiGenerating) return@setOnClickListener
+            startAiGeneration(prompt)
         }
+    }
+
+    /**
+     * Bắt đầu trạng thái "AI đang tạo": viền xanh-cam chạy quanh promptCard,
+     * phần còn lại của màn hình tối đi kèm Lottie loading.
+     */
+    private fun startAiGeneration(prompt: String) {
+        setAiLoading(true)
+
+        // TODO: gọi backend tạo sticker bằng `prompt` ở đây, xong thì gọi setAiLoading(false).
+        // Đoạn delay dưới đây chỉ để xem demo hiệu ứng -> xoá khi nối backend.
+        lifecycleScope.launch {
+            delay(4000)
+            setAiLoading(false)
+        }
+    }
+
+    private fun setAiLoading(loading: Boolean) {
+        if (isAiGenerating == loading) return
+        isAiGenerating = loading
+
+        if (loading) {
+            // Ẩn bàn phím + bỏ focus để card không bị đẩy lung tung khi đang chạy
+            (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                .hideSoftInputFromWindow(binding.etPrompt.windowToken, 0)
+            binding.etPrompt.clearFocus()
+
+            binding.aiLoadingOverlay.apply {
+                alpha = 0f
+                visibility = View.VISIBLE
+                animate().alpha(1f).setDuration(250).start()
+            }
+            binding.aiLoadingLottie.playAnimation()
+            aiGlow.start()
+            binding.aiGlowHalo.start()
+        } else {
+            aiGlow.stop()
+            binding.aiGlowHalo.stop()
+            binding.aiLoadingOverlay.animate().alpha(0f).setDuration(200).withEndAction {
+                if (!isAiGenerating) {
+                    binding.aiLoadingOverlay.visibility = View.GONE
+                    binding.aiLoadingLottie.cancelAnimation()
+                }
+            }.start()
+        }
+
+        binding.etPrompt.isEnabled = !loading
+        binding.btnSendPrompt.isEnabled = !loading
     }
 
     private fun setupTextOverlayLogic() {
@@ -483,7 +570,9 @@ class StickerEditActivity : AppCompatActivity() {
         // Chặn sự kiện nút Back vật lý / vuốt Back của điện thoại
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (::textController.isInitialized && textController.isShowing) {
+                if (isAiGenerating) {
+                    setAiLoading(false) // Back khi đang tạo AI = huỷ
+                } else if (::textController.isInitialized && textController.isShowing) {
                     textController.commit()
                 } else {
                     showSaveConfirmationDialog()

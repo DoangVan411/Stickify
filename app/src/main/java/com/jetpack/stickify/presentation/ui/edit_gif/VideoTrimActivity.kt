@@ -103,13 +103,13 @@ class VideoTrimActivity : AppCompatActivity(), TextureView.SurfaceTextureListene
 
         binding.btnContinue.setOnClickListener {
             val uri = videoUri ?: return@setOnClickListener
-            val resultIntent = Intent().apply {
-                putExtra(EXTRA_VIDEO_URI, uri)
-                putExtra(EXTRA_START_MS, startTrimMs)
-                putExtra(EXTRA_END_MS, endTrimMs)
+            val intent = Intent(this, GifEditActivity::class.java).apply {
+                putExtra(GifEditActivity.EXTRA_VIDEO_URI, uri)
+                putExtra(GifEditActivity.EXTRA_START_MS, startTrimMs)
+                putExtra(GifEditActivity.EXTRA_END_MS, endTrimMs)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            setResult(RESULT_OK, resultIntent)
-            Toast.makeText(this, "Đã chọn đoạn video: ${binding.tvDurationBadge.text}", Toast.LENGTH_SHORT).show()
+            startActivity(intent)
         }
     }
 

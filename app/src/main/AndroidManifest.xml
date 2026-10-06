@@ -43,6 +43,11 @@
             android:exported="false"
             android:screenOrientation="portrait" />
         <activity
+            android:name=".presentation.ui.edit_gif.GifEditActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".presentation.ui.home.HomeActivity"
             android:exported="true"
             android:theme="@style/Theme.Stickify">

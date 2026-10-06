@@ -535,7 +535,7 @@ class StickerEditActivity : AppCompatActivity() {
         exportResultUri = null
         if (exportBitmap != null) {
             pendingExport = true
-            sharedViewModel.saveCurrentSticker(exportBitmap)
+            sharedViewModel.saveCurrentSticker(exportBitmap, currentProjectId)
         }
 
         // Nếu là mở project cũ, không ghi đè viền bằng giá trị mặc định của thanh công cụ

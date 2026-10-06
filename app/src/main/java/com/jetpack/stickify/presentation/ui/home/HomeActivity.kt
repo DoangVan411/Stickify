@@ -5,6 +5,7 @@ import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -21,6 +22,7 @@ import com.google.android.material.behavior.HideBottomViewOnScrollBehavior
 import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.ActivityHomeBinding
 import com.jetpack.stickify.presentation.ui.gallery.GalleryActivity
+import com.jetpack.stickify.presentation.ui.keyboard.EnableKeyboardDialogFragment
 import dagger.hilt.android.AndroidEntryPoint
 
 /**
@@ -61,6 +63,23 @@ class HomeActivity : AppCompatActivity() {
 
         setupNavigation()
         setupBottomBar()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        checkKeyboardEnabled()
+    }
+
+    private fun checkKeyboardEnabled() {
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+        val enabledMethods = imm.enabledInputMethodList
+        val isEnabled = enabledMethods.any { it.packageName == packageName }
+        if (!isEnabled) {
+            val dialog = EnableKeyboardDialogFragment.newInstance()
+            if (supportFragmentManager.findFragmentByTag(EnableKeyboardDialogFragment.TAG) == null) {
+                dialog.show(supportFragmentManager, EnableKeyboardDialogFragment.TAG)
+            }
+        }
     }
 
     private fun setupNavigation() {

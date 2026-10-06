@@ -1,9 +1,11 @@
 package com.jetpack.stickify.di
 
 import com.jetpack.stickify.data.repository.AssetRepositoryImpl
+import com.jetpack.stickify.data.repository.KeyboardStickerRepositoryImpl
 import com.jetpack.stickify.data.repository.ProjectRepositoryImpl
 import com.jetpack.stickify.data.repository.StickerRepositoryImpl
 import com.jetpack.stickify.domain.repository.AssetRepository
+import com.jetpack.stickify.domain.repository.KeyboardStickerRepository
 import com.jetpack.stickify.domain.repository.ProjectRepository
 import com.jetpack.stickify.domain.repository.StickerRepository
 import dagger.Binds
@@ -30,6 +32,12 @@ abstract class RepositoryModule {
     abstract fun bindAssetRepository(
         impl: AssetRepositoryImpl
     ): AssetRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindKeyboardStickerRepository(
+        impl: KeyboardStickerRepositoryImpl
+    ): KeyboardStickerRepository
 
     @Binds
     abstract fun bindStickerRepository(

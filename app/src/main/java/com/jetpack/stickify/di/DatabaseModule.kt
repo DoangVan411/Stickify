@@ -46,4 +46,6 @@ object DatabaseModule {
     fun provideAssetDao(database: AppDatabase): AssetDao {
         return database.assetDao()
     }
+    @Provides
+    fun provideKeyboardDao(db: AppDatabase) = db.stickerDao()
 }

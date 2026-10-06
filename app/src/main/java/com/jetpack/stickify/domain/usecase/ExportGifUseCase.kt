@@ -6,8 +6,7 @@ import com.jetpack.stickify.domain.repository.StickerRepository
 import javax.inject.Inject
 
 /**
- * UseCase xuất sticker dưới dạng GIF có animation.
- * Nhận bitmap gốc và loại hiệu ứng, trả về URI string của file GIF đã lưu.
+ * UseCase xuất sticker dưới dạng WebP có animation.
  */
 class ExportGifUseCase @Inject constructor(
     private val repository: StickerRepository
@@ -16,7 +15,6 @@ class ExportGifUseCase @Inject constructor(
         bitmap: Bitmap,
         animationType: StickerAnimationType
     ): String {
-        return repository.saveAnimatedGif(bitmap, animationType)
+        return repository.saveAnimatedSticker(bitmap, animationType)
     }
 }
-

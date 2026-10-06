@@ -3,7 +3,9 @@ package com.jetpack.stickify.di
 import android.content.Context
 import androidx.room.Room
 import com.jetpack.stickify.data.source.local.AppDatabase
+import com.jetpack.stickify.data.source.local.dao.AssetDao
 import com.jetpack.stickify.data.source.local.dao.ProjectDao
+import com.jetpack.stickify.data.source.local.dao.StickerPackDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -35,5 +37,13 @@ object DatabaseModule {
     @Provides
     fun provideProjectDao(database: AppDatabase): ProjectDao {
         return database.projectDao()
+    }
+    @Provides
+    fun provideStickerPackDao(database: AppDatabase): StickerPackDao {
+        return database.stickerPackDao()
+    }
+    @Provides
+    fun provideAssetDao(database: AppDatabase): AssetDao {
+        return database.assetDao()
     }
 }

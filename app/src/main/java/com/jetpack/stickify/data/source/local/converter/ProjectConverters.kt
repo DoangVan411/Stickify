@@ -1,6 +1,8 @@
 package com.jetpack.stickify.data.source.local.converter
 
 import androidx.room.TypeConverter
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.jetpack.stickify.domain.model.EditHistory
 import com.jetpack.stickify.domain.model.ProjectContent
 import com.jetpack.stickify.domain.model.ProjectOrigin
@@ -74,5 +76,16 @@ class ProjectConverters {
         } catch (e: Exception) {
             null
         }
+    }
+
+    @TypeConverter
+    fun fromStringList(value: List<String>?): String {
+        return Gson().toJson(value)
+    }
+
+    @TypeConverter
+    fun toStringList(value: String): List<String> {
+        val listType = object : TypeToken<List<String>>() {}.type
+        return Gson().fromJson(value, listType) ?: emptyList()
     }
 }

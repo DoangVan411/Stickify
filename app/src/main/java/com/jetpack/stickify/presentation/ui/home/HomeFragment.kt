@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -20,6 +21,7 @@ import com.jetpack.stickify.presentation.ui.edit_sticker.StickerEditActivity
 import com.jetpack.stickify.presentation.ui.home.adapter.ExploreCategoryAdapter
 import com.jetpack.stickify.presentation.ui.home.adapter.ExploreTemplateAdapter
 import com.jetpack.stickify.presentation.ui.home.adapter.HorizontalSpaceItemDecoration
+import com.jetpack.stickify.presentation.ui.home.adapter.RecentAction
 import com.jetpack.stickify.presentation.ui.home.adapter.RecentProjectAdapter
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -51,9 +53,35 @@ class HomeFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        setupDialogListeners()
         setupRecyclerViews()
         setupClickListeners()
         observeUiState()
+    }
+
+    private fun setupDialogListeners() {
+        childFragmentManager.setFragmentResultListener(
+            EditNameDialogFragment.REQUEST_KEY,
+            viewLifecycleOwner
+        ) { _, bundle ->
+            val projectId = bundle.getString(EditNameDialogFragment.EXTRA_PROJECT_ID)
+            val newName = bundle.getString(EditNameDialogFragment.EXTRA_NEW_NAME)
+            if (!projectId.isNullOrEmpty() && !newName.isNullOrEmpty()) {
+                viewModel.updateProjectName(projectId, newName)
+                Toast.makeText(context, "Đã cập nhật tên dự án", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        childFragmentManager.setFragmentResultListener(
+            ConfirmDeleteProjectDialogFragment.REQUEST_KEY,
+            viewLifecycleOwner
+        ) { _, bundle ->
+            val projectId = bundle.getString(ConfirmDeleteProjectDialogFragment.EXTRA_PROJECT_ID)
+            if (!projectId.isNullOrEmpty()) {
+                viewModel.deleteProject(projectId)
+                Toast.makeText(context, "Đã xóa dự án", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     private fun setupRecyclerViews() {
@@ -64,6 +92,23 @@ class HomeFragment : Fragment() {
                     putExtra(StickerEditActivity.EXTRA_PROJECT_ID, projectId)
                 }
                 startActivity(intent)
+            },
+            onActionClick = { project, action ->
+                when (action) {
+                    RecentAction.TOGGLE_FAVORITE -> {
+                        viewModel.toggleBookmark(project.id, !project.isBookmarked)
+                        val msg = if (!project.isBookmarked) "Đã thêm vào yêu thích" else "Đã xóa khỏi yêu thích"
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    }
+                    RecentAction.RENAME -> {
+                        val dialog = EditNameDialogFragment.newInstance(project.id, project.name)
+                        dialog.show(childFragmentManager, EditNameDialogFragment.TAG)
+                    }
+                    RecentAction.DELETE -> {
+                        val dialog = ConfirmDeleteProjectDialogFragment.newInstance(project.id, project.name)
+                        dialog.show(childFragmentManager, ConfirmDeleteProjectDialogFragment.TAG)
+                    }
+                }
             }
         )
         val spacePx = resources.getDimensionPixelSize(R.dimen.spacing_sm)
@@ -135,6 +180,10 @@ class HomeFragment : Fragment() {
         binding.progressBar.visibility = if (state.isLoading) View.VISIBLE else View.GONE
 
         // Recent Projects
+        val hasRecent = state.recentProjects.isNotEmpty()
+        binding.rvRecentProjects.isVisible = hasRecent
+        binding.tvRecentEmpty.isVisible = !hasRecent
+        binding.tvSeeAll.isVisible = hasRecent
         recentAdapter.submitList(state.recentProjects)
 
         // Category selection

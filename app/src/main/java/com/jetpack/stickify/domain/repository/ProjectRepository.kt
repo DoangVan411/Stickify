@@ -23,6 +23,20 @@ interface ProjectRepository {
     suspend fun getRecentProjects(): Result<List<ProjectEntity>>
     fun getRecentProjectsFlow(): Flow<List<ProjectEntity>>
     suspend fun getExploreTemplates(category: ExploreCategory): Result<List<StickerTemplate>>
-    suspend fun getFavoriteStickers(): Result<List<FavoriteSticker>>
+
+    // Favorites
+    suspend fun getFavoriteStickers(): Result<List<StickerProject>>
+    suspend fun toggleBookmark(projectId: String, isBookmarked: Boolean): Result<Unit>
+    suspend fun deleteProject(projectId: String): Result<Unit>
+    suspend fun updateProjectName(projectId: String, newName: String): Result<Unit>
+
+    // Sticker Packs
     suspend fun getStickerPacks(): Result<List<StickerPack>>
+    suspend fun getPackById(packId: String): Result<StickerPack?>
+    suspend fun createStickerPack(pack: StickerPack): Result<Unit>
+    suspend fun deleteStickerPack(packId: String): Result<Unit>
+    suspend fun addStickerToPack(packId: String, stickerId: String): Result<Unit>
+
+    // WhatsApp Export
+    suspend fun exportToWhatsApp(packId: String): Result<Unit>
 }

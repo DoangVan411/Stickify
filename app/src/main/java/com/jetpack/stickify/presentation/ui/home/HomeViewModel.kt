@@ -3,6 +3,7 @@ package com.jetpack.stickify.presentation.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jetpack.stickify.domain.model.ExploreCategory
+import com.jetpack.stickify.domain.repository.ProjectRepository
 import com.jetpack.stickify.domain.usecase.GetExploreTemplatesUseCase
 import com.jetpack.stickify.domain.usecase.GetRecentProjectsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,7 +23,8 @@ import javax.inject.Inject
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val getRecentProjectsUseCase: GetRecentProjectsUseCase,
-    private val getExploreTemplatesUseCase: GetExploreTemplatesUseCase
+    private val getExploreTemplatesUseCase: GetExploreTemplatesUseCase,
+    private val projectRepository: ProjectRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -77,6 +79,24 @@ class HomeViewModel @Inject constructor(
             }.onFailure { error ->
                 _uiState.update { it.copy(error = error.message, isLoading = false) }
             }
+        }
+    }
+
+    fun toggleBookmark(projectId: String, isBookmarked: Boolean) {
+        viewModelScope.launch {
+            projectRepository.toggleBookmark(projectId, isBookmarked)
+        }
+    }
+
+    fun deleteProject(projectId: String) {
+        viewModelScope.launch {
+            projectRepository.deleteProject(projectId)
+        }
+    }
+
+    fun updateProjectName(projectId: String, newName: String) {
+        viewModelScope.launch {
+            projectRepository.updateProjectName(projectId, newName)
         }
     }
 

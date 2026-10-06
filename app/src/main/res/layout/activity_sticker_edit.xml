@@ -114,7 +114,8 @@
         <androidx.cardview.widget.CardView
             android:id="@+id/promptCard"
             android:layout_width="0dp"
-            android:layout_height="52dp"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
             android:layout_marginHorizontal="20dp"
             android:layout_marginTop="24dp"
             app:cardBackgroundColor="@android:color/white"
@@ -130,25 +131,27 @@
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="16dp"
-                android:paddingEnd="6dp">
+                android:paddingTop="6dp"
+                android:paddingEnd="6dp"
+                android:paddingBottom="6dp">
 
                 <!-- Icon lấp lánh (sparkles) bên trái -->
                 <ImageView
                     android:layout_width="24dp"
                     android:layout_height="24dp"
-                    android:layout_marginEnd="8dp"
                     android:src="@drawable/ic_spark"
-                    app:tint="#F2E683" /> <!-- Thay tên icon theo project của bạn -->
+                    app:tint="#F2E683" />
 
                 <EditText
                     android:id="@+id/etPrompt"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:layout_marginHorizontal="8dp"
                     android:background="@android:color/transparent"
                     android:hint="Tạo sticker động, chỉ với vài dòng..."
-                    android:inputType="text"
-                    android:maxLines="1"
+                    android:inputType="textMultiLine"
+                    android:maxLines="5"
                     android:textColorHint="#888888"
                     android:textSize="14sp" />
 
@@ -160,12 +163,11 @@
                     android:background="@drawable/bg_circle_primary"
                     android:padding="12dp"
                     android:scaleType="centerInside"
-                    android:src="@drawable/ic_send" /> <!-- Bạn nên dùng icon máy bay giấy màu trắng -->
+                    android:src="@drawable/ic_send" />
 
             </LinearLayout>
 
         </androidx.cardview.widget.CardView>
-
         <!-- Thay thế HorizontalScrollView và LinearLayout cũ bằng Custom View -->
         <com.jetpack.stickify.presentation.ui.edit_sticker.custom_view.EditorPanelView
             android:id="@+id/editorPanel"
@@ -196,6 +198,47 @@
                 android:paddingBottom="24dp" />
 
         </androidx.core.widget.NestedScrollView>
+
+        <!-- Lớp phủ tối khi AI đang tạo sticker.
+             elevation (5dp) < promptCard (6dp) nên promptCard vẫn nằm trên và giữ nguyên.
+             clickable để chặn mọi thao tác phía dưới. -->
+        <FrameLayout
+            android:id="@+id/aiLoadingOverlay"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:background="#B3000000"
+            android:clickable="true"
+            android:elevation="5dp"
+            android:focusable="true"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <com.airbnb.lottie.LottieAnimationView
+                android:id="@+id/aiLoadingLottie"
+                android:layout_width="100dp"
+                android:layout_height="100dp"
+                android:layout_gravity="center"
+                app:lottie_fileName="anim_loading.json"
+                app:lottie_loop="true" />
+
+        </FrameLayout>
+
+        <!-- Quầng sáng sóng biển nhòe ra ngoài promptCard.
+             Cùng parent với promptCard, elevation 5.5dp: trên lớp phủ tối (5dp), dưới card (6dp). -->
+        <com.jetpack.stickify.presentation.ui.edit_sticker.prompt_sticker.AiGlowHaloView
+
+            android:id="@+id/aiGlowHalo"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:elevation="5.5dp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
 
         <include
             android:id="@+id/addTextLayout"

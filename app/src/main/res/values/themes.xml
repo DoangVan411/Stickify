@@ -10,4 +10,17 @@
     </style>
 
     <style name="Theme.Stickify" parent="Base.Theme.Stickify" />
+
+    <style name="KeyButtonStyle">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:layout_margin">3dp</item>
+        <item name="android:background">@drawable/bg_keyboard_key</item>
+        <item name="android:textColor">#212121</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
 </resources>

@@ -85,4 +85,12 @@
     <string name="btn_continue">Tiếp tục</string>
     <string name="select_image_or_video">Chọn ảnh hoặc video</string>
     <string name="press_somethign">Nhập gì đó...</string>
+    <string name="select_video_clip">Chọn đoạn video</string>
+    <string name="edit_gif_title">Chỉnh sửa</string>
+    <string name="btn_create_gif">Tạo</string>
+    <string name="tool_decor">Trang trí</string>
+    <string name="tool_text">Chữ</string>
+    <string name="tool_speed">Tốc độ</string>
+    <string name="exporting_gif">Đang tạo GIF...</string>
+    <string name="gif_exported_success">Đã tạo GIF thành công!</string>
 </resources>

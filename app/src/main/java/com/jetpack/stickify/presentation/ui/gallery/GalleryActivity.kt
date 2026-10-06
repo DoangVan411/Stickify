@@ -179,8 +179,11 @@ class GalleryActivity : AppCompatActivity() {
 
     private fun onMediaSelected(item: MediaItem) {
         if (item.isVideo) {
-            // Cutout hiện chỉ xử lý ảnh tĩnh. Mở rộng sau nếu cần cắt frame từ video.
-            Toast.makeText(this, "Chức năng cắt hiện chỉ áp dụng cho ảnh", Toast.LENGTH_SHORT).show()
+            val intent = Intent(this, com.jetpack.stickify.presentation.ui.edit_gif.VideoTrimActivity::class.java).apply {
+                putExtra(com.jetpack.stickify.presentation.ui.edit_gif.VideoTrimActivity.EXTRA_VIDEO_URI, item.uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(intent)
             return
         }
         val intent = Intent(this, CutoutActivity::class.java).apply {

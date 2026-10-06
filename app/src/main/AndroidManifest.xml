@@ -31,6 +31,10 @@
             android:name=".presentation.ui.cut_image.CutoutActivity"
             android:exported="false" />
         <activity
+            android:name=".presentation.ui.edit_gif.VideoTrimActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
             android:name=".presentation.ui.home.HomeActivity"
             android:exported="true"
             android:theme="@style/Theme.Stickify">

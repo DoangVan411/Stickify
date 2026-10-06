@@ -18,7 +18,7 @@ interface StickerRepository {
         color: Int
     ): Bitmap
 
-    suspend fun saveAnimatedGif(
+    suspend fun saveAnimatedSticker(
         bitmap: Bitmap,
         animationType: StickerAnimationType
     ): String

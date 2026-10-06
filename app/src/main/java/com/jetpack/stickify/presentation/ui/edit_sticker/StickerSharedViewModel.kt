@@ -15,6 +15,7 @@ import com.jetpack.stickify.domain.usecase.SaveStickerUseCase
 import androidx.core.graphics.scale
 import com.jetpack.stickify.domain.usecase.ApplyBorderUseCase
 import com.jetpack.stickify.domain.usecase.ExportGifUseCase
+import com.jetpack.stickify.domain.usecase.AddStickerToKeyboardUseCase
 import com.jetpack.stickify.domain.model.StickerAnimationType
 import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorModel
 import kotlinx.coroutines.Job
@@ -27,7 +28,8 @@ class StickerSharedViewModel @Inject constructor(
     private val processStickerUseCase: ProcessStickerUseCase,
     private val saveStickerUseCase: SaveStickerUseCase,
     private val applyBorderUseCase: ApplyBorderUseCase,
-    private val exportGifUseCase: ExportGifUseCase
+    private val exportGifUseCase: ExportGifUseCase,
+    private val addStickerToKeyboardUseCase: AddStickerToKeyboardUseCase
 ) : ViewModel() {
 
     private val _isLoading = MutableLiveData<Boolean>()
@@ -145,7 +147,7 @@ class StickerSharedViewModel @Inject constructor(
         _currentAnimation.value = animationType
     }
 
-    fun saveCurrentSticker(overrideBitmap: Bitmap? = null) {
+    fun saveCurrentSticker(overrideBitmap: Bitmap? = null, sourceId: String? = null) {
         val currentBitmap = overrideBitmap ?: styleBitmaps[_currentStyle.value ?: StickerStyle.ORIGINAL] ?: return
 
         _isLoading.value = true
@@ -153,12 +155,18 @@ class StickerSharedViewModel @Inject constructor(
             try {
                 // Gọi Use Case lưu ảnh (hoặc xuất GIF nếu chọn animation)
                 val anim = _currentAnimation.value
-                val savedUri = if (anim != null && anim.isAnimated) {
+                val isAnimated = anim != null && anim.isAnimated
+                val savedUri = if (isAnimated) {
                     exportGifUseCase(currentBitmap, anim)
                 } else {
                     saveStickerUseCase(currentBitmap)
                 }
-                _saveSuccessEvent.value = savedUri
+
+                if (savedUri != null) {
+                    addStickerToKeyboardUseCase(savedUri.toString(), isAnimated, sourceId)
+                }
+
+                _saveSuccessEvent.value = savedUri?.toString()
             } catch (e: Exception) {
                 // Handle Error
             } finally {

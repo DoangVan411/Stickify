@@ -163,8 +163,10 @@ class StickerEditActivity : AppCompatActivity() {
                 putExtra(StickerPreviewActivity.EXTRA_IS_ANIMATED, isAnimated)
             }
             startActivity(intent)
+            finish()
         } else {
             setResult(RESULT_OK)
+            finish()
         }
     }
 

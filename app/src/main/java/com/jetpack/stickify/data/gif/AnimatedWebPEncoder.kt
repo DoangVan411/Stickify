@@ -28,34 +28,40 @@ object AnimatedWebPEncoder {
             frame.compress(format, 100, baos)
             val webpBytes = baos.toByteArray()
 
-            // Strip 12-byte RIFF header ("RIFF" + 4-byte size + "WEBP") if present
-            val payload = if (webpBytes.size > 12 &&
-                webpBytes[0] == 'R'.code.toByte() &&
-                webpBytes[1] == 'I'.code.toByte() &&
-                webpBytes[2] == 'F'.code.toByte() &&
-                webpBytes[3] == 'F'.code.toByte()
-            ) {
-                webpBytes.copyOfRange(12, webpBytes.size)
-            } else {
-                webpBytes
+            // FIX LỖI 2: Quét qua file WebP tĩnh để bóc tách chính xác Chunk ảnh (ALPH, VP8, VP8L)
+            // Tuyệt đối không lấy nhầm VP8X, ICCP, hay EXIF vào trong ANMF
+            val payloadStream = ByteArrayOutputStream()
+            var offset = 12 // Bỏ qua 12 byte RIFF header ("RIFF" + size + "WEBP")
+
+            while (offset + 8 <= webpBytes.size) {
+                val chunkId = String(webpBytes, offset, 4)
+                val chunkSize = ByteBuffer.wrap(webpBytes, offset + 4, 4).order(ByteOrder.LITTLE_ENDIAN).int
+                val chunkTotal = 8 + chunkSize + (if (chunkSize % 2 != 0) 1 else 0)
+
+                if (chunkId == "ALPH" || chunkId == "VP8 " || chunkId == "VP8L") {
+                    payloadStream.write(webpBytes, offset, chunkTotal)
+                }
+                offset += chunkTotal
             }
-            framePayloads.add(payload)
+            framePayloads.add(payloadStream.toByteArray())
         }
 
-        var bodySize = 18 + 14
+        // FIX LỖI 1: RIFF Size phải CHUẨN. Bao gồm: 4 (WEBP) + 18 (VP8X) + 14 (ANIM) = 36 byte
+        var riffSize = 4 + 18 + 14
         for (payload in framePayloads) {
-            bodySize += (24 + payload.size)
+            riffSize += (24 + payload.size) // 24 byte header của ANMF + payload ảnh
         }
 
         val fileOutputStream = FileOutputStream(outFile)
-        val buffer = ByteBuffer.allocate(12 + bodySize).order(ByteOrder.LITTLE_ENDIAN)
+        // buffer allocate = 8 byte (RIFF + size) + phần còn lại
+        val buffer = ByteBuffer.allocate(8 + riffSize).order(ByteOrder.LITTLE_ENDIAN)
 
         // 1. RIFF Header
         buffer.put('R'.code.toByte())
         buffer.put('I'.code.toByte())
         buffer.put('F'.code.toByte())
         buffer.put('F'.code.toByte())
-        buffer.putInt(bodySize)
+        buffer.putInt(riffSize)
         buffer.put('W'.code.toByte())
         buffer.put('E'.code.toByte())
         buffer.put('B'.code.toByte())
@@ -94,14 +100,15 @@ object AnimatedWebPEncoder {
 
             put24LE(buffer, 0) // X
             put24LE(buffer, 0) // Y
-            put24LE(buffer, width - 1) // Width - 1
-            put24LE(buffer, height - 1) // Height - 1
-            put24LE(buffer, delayMs) // Duration in ms
+            put24LE(buffer, width - 1)
+            put24LE(buffer, height - 1)
+            put24LE(buffer, delayMs)
 
-            // Frame flags
-            buffer.put(0.toByte())
+            // FIX LỖI 3: Bit 1 (Disposal) = 1. (0x02).
+            // Bắt buộc phải xóa frame trước đó để tránh bóng ma khi vật thể di chuyển.
+            buffer.put(0x02.toByte())
 
-            // Frame payload (VP8L chunk)
+            // Nạp Payload
             buffer.put(payload)
         }
 

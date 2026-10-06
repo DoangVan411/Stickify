@@ -153,9 +153,21 @@ class StickerEditActivity : AppCompatActivity() {
     private fun finishWhenSaveDone() {
         if (pendingExport || pendingProject) return
         val uri = exportResultUri
-        if (uri != null) setResult(RESULT_OK, Intent().putExtra(EXTRA_RESULT_URI, uri)) else setResult(RESULT_OK)
-        Toast.makeText(this, "Đã lưu sticker thành công!", Toast.LENGTH_SHORT).show()
-        finish()
+        if (uri != null) {
+            val anim = sharedViewModel.currentAnimation.value
+            val isAnimated = anim != null && anim.isAnimated
+
+            val intent = Intent(this, StickerPreviewActivity::class.java).apply {
+                putExtra(StickerPreviewActivity.EXTRA_STICKER_URI, uri)
+                putExtra(StickerPreviewActivity.EXTRA_PROJECT_ID, currentProjectId)
+                putExtra(StickerPreviewActivity.EXTRA_IS_ANIMATED, isAnimated)
+            }
+            startActivity(intent)
+            finish()
+        } else {
+            setResult(RESULT_OK)
+            finish()
+        }
     }
 
     // 2 nguồn loading (shared: xử lý ảnh/viền, edit: load/lưu project) dùng chung 1 progress bar,

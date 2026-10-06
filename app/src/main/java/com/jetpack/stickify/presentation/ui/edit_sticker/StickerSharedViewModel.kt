@@ -28,8 +28,7 @@ class StickerSharedViewModel @Inject constructor(
     private val processStickerUseCase: ProcessStickerUseCase,
     private val saveStickerUseCase: SaveStickerUseCase,
     private val applyBorderUseCase: ApplyBorderUseCase,
-    private val exportGifUseCase: ExportGifUseCase,
-    private val addStickerToKeyboardUseCase: AddStickerToKeyboardUseCase
+    private val exportGifUseCase: ExportGifUseCase
 ) : ViewModel() {
 
     private val _isLoading = MutableLiveData<Boolean>()
@@ -162,11 +161,7 @@ class StickerSharedViewModel @Inject constructor(
                     saveStickerUseCase(currentBitmap)
                 }
 
-                if (savedUri != null) {
-                    addStickerToKeyboardUseCase(savedUri.toString(), isAnimated, sourceId)
-                }
-
-                _saveSuccessEvent.value = savedUri?.toString()
+                _saveSuccessEvent.value = savedUri
             } catch (e: Exception) {
                 // Handle Error
             } finally {

@@ -250,23 +250,33 @@ class StickifyKeyboardService : InputMethodService() {
         override fun areContentsTheSame(oldItem: KeyboardStickerEntity, newItem: KeyboardStickerEntity) = oldItem == newItem
     }) {
 
+        var hideFirstItemImage: Boolean = false
+            set(value) {
+                field = value
+                notifyItemChanged(0)
+            }
+
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
             val view = LayoutInflater.from(parent.context).inflate(R.layout.item_keyboard_sticker_grid, parent, false)
             return ViewHolder(view)
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            holder.bind(getItem(position), onClick)
+            holder.bind(getItem(position), onClick, position == 0 && hideFirstItemImage)
         }
 
         class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
             private val ivThumb: ImageView = view.findViewById(R.id.ivGridStickerThumb)
 
-            fun bind(sticker: KeyboardStickerEntity, onClick: (KeyboardStickerEntity) -> Unit) {
-                Glide.with(itemView.context)
-                    .load(File(sticker.fileName))
-                    .placeholder(R.drawable.ic_sticker_cat)
-                    .into(ivThumb)
+            fun bind(sticker: KeyboardStickerEntity, onClick: (KeyboardStickerEntity) -> Unit, hideImage: Boolean = false) {
+                if (hideImage) {
+                    ivThumb.setImageDrawable(null)
+                } else {
+                    Glide.with(itemView.context)
+                        .load(File(sticker.fileName))
+                        .placeholder(R.drawable.ic_sticker_cat)
+                        .into(ivThumb)
+                }
 
                 itemView.setOnClickListener { onClick(sticker) }
             }

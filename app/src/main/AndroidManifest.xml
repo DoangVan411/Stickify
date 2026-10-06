@@ -30,6 +30,9 @@
             android:screenOrientation="portrait"
             />
         <activity
+            android:name=".presentation.ui.edit_sticker.StickerPreviewActivity"
+            android:exported="false" />
+        <activity
             android:name=".presentation.ui.collection.create_package.CreateStickerPackActivity"
             android:exported="false" />
         <activity

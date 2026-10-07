@@ -15,7 +15,6 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.GridLayoutManager
 import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.FragmentCollectionBinding
-import com.jetpack.stickify.domain.model.StickerPack
 import com.jetpack.stickify.domain.model.StickerProject
 import com.jetpack.stickify.presentation.ui.collection.adapter.FavoriteAction
 import com.jetpack.stickify.presentation.ui.collection.adapter.FavoriteStickerAdapter
@@ -142,7 +141,6 @@ class CollectionFragment : Fragment() {
                     }
                     FavoriteAction.ADD_TO_PACK -> {
                         tempSelectedStickerForPack = sticker
-                        tempAvailablePacks = viewModel.uiState.value.stickerPacks
                         val dialog = SelectPacksDialogFragment.newInstance()
                         dialog.show(childFragmentManager, SelectPacksDialogFragment.TAG)
                     }
@@ -231,7 +229,6 @@ class CollectionFragment : Fragment() {
     }
 
     companion object {
-        var tempAvailablePacks: List<StickerPack> = emptyList()
         var tempSelectedStickerForPack: StickerProject? = null
     }
 }

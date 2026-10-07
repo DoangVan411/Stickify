@@ -8,12 +8,15 @@ import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.CheckBox
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.os.bundleOf
 import androidx.fragment.app.DialogFragment
+import androidx.fragment.app.viewModels
 import androidx.fragment.app.setFragmentResult
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
@@ -21,11 +24,15 @@ import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.textfield.TextInputEditText
 import com.jetpack.stickify.R
 import com.jetpack.stickify.domain.model.StickerPack
-import com.jetpack.stickify.presentation.ui.collection.CollectionFragment
+import com.jetpack.stickify.presentation.ui.collection.CollectionViewModel
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class SelectPacksDialogFragment : DialogFragment() {
 
     private val selectedPackIds = mutableSetOf<String>()
+    private val viewModel: CollectionViewModel by viewModels()
     private lateinit var adapter: PackPickerAdapter
 
     override fun onCreateView(
@@ -54,9 +61,7 @@ class SelectPacksDialogFragment : DialogFragment() {
         val btnCancel = view.findViewById<View>(R.id.btnCancelPackPicker)
         val btnAdd = view.findViewById<View>(R.id.btnAddPackPicker)
 
-        val available = CollectionFragment.tempAvailablePacks
-
-        adapter = PackPickerAdapter(available, selectedPackIds) { pack, isChecked ->
+        adapter = PackPickerAdapter(emptyList(), selectedPackIds) { pack, isChecked ->
             if (isChecked) {
                 selectedPackIds.add(pack.id)
             } else {
@@ -75,6 +80,15 @@ class SelectPacksDialogFragment : DialogFragment() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect { state ->
+                    adapter.updateData(state.stickerPacks)
+                }
+            }
+        }
+        viewModel.loadCollectionData()
+
         btnCancel.setOnClickListener {
             dismiss()
         }
@@ -89,14 +103,21 @@ class SelectPacksDialogFragment : DialogFragment() {
     }
 
     class PackPickerAdapter(
-        private val allPacks: List<StickerPack>,
+        private var allPacks: List<StickerPack>,
         private val selectedIds: MutableSet<String>,
         private val onCheckChanged: (StickerPack, Boolean) -> Unit
     ) : RecyclerView.Adapter<PackPickerAdapter.PackViewHolder>() {
 
         private var filteredList: List<StickerPack> = allPacks
+        private var lastQuery: String = ""
+
+        fun updateData(newPacks: List<StickerPack>) {
+            allPacks = newPacks
+            filter(lastQuery)
+        }
 
         fun filter(query: String) {
+            lastQuery = query
             filteredList = if (query.isBlank()) {
                 allPacks
             } else {

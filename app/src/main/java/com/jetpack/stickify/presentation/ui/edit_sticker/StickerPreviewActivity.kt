@@ -66,7 +66,7 @@ class StickerPreviewActivity : AppCompatActivity() {
                 .scaleX(1f)
                 .scaleY(1f)
                 .translationY(0f)
-                .setDuration(1500)
+                .setDuration(1000)
                 .setInterpolator(OvershootInterpolator(1.2f))
                 .start()
         }
@@ -105,7 +105,7 @@ class StickerPreviewActivity : AppCompatActivity() {
                     val bottomSheet = KeyboardStickersBottomSheetDialogFragment.newInstance()
                     bottomSheet.onShownListener = {
                         bottomSheet.getTopLeftItemScreenLocation { targetLoc, targetW, targetH ->
-                            animateFlyToTarget(targetLoc[0].toFloat(), targetLoc[1].toFloat(), targetW, targetH) {
+                            animateFlyToTarget(bottomSheet, targetLoc[0].toFloat(), targetLoc[1].toFloat(), targetW, targetH) {
                                 bottomSheet.setFlyingCompleted()
                             }
                         }
@@ -132,11 +132,20 @@ class StickerPreviewActivity : AppCompatActivity() {
         }
     }
 
-    private fun animateFlyToTarget(endX: Float, endY: Float, targetW: Int, targetH: Int, onComplete: () -> Unit) {
-        val rootLayout = findViewById<ViewGroup>(android.R.id.content) ?: run {
-            onComplete()
-            return
-        }
+    private fun animateFlyToTarget(
+        bottomSheet: KeyboardStickersBottomSheetDialogFragment,
+        endX: Float,
+        endY: Float,
+        targetW: Int,
+        targetH: Int,
+        onComplete: () -> Unit
+    ) {
+        val container = (bottomSheet.dialog?.window?.decorView as? ViewGroup)
+            ?: findViewById<ViewGroup>(android.R.id.content)
+            ?: run {
+                onComplete()
+                return
+            }
 
         val startLoc = IntArray(2)
         ivPreviewSticker.getLocationOnScreen(startLoc)
@@ -154,6 +163,8 @@ class StickerPreviewActivity : AppCompatActivity() {
             layoutParams = FrameLayout.LayoutParams(startW, startH)
             x = startX
             y = startY
+            elevation = 999f
+            translationZ = 999f
             scaleType = ImageView.ScaleType.FIT_CENTER
             stickerUri?.let { uri ->
                 Glide.with(this@StickerPreviewActivity)
@@ -161,21 +172,24 @@ class StickerPreviewActivity : AppCompatActivity() {
                     .into(this)
             }
         }
-        rootLayout.addView(animView)
+        container.addView(animView)
 
         val targetScaleX = if (startW > 0) targetW.toFloat() / startW else 0.35f
         val targetScaleY = if (startH > 0) targetH.toFloat() / startH else 0.35f
 
+        val adjustedEndX = endX + (targetW - startW) / 2f
+        val adjustedEndY = endY + (targetH - startH) / 2f
+
         animView.animate()
-            .x(endX)
-            .y(endY)
+            .x(adjustedEndX)
+            .y(adjustedEndY)
             .scaleX(targetScaleX)
             .scaleY(targetScaleY)
-            .alpha(0.85f)
-            .setDuration(600)
+            .alpha(1.0f)
+            .setDuration(1400)
             .setInterpolator(AccelerateDecelerateInterpolator())
             .withEndAction {
-                rootLayout.removeView(animView)
+                container.removeView(animView)
                 onComplete()
             }
             .start()

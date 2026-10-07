@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetBehavior
@@ -83,16 +84,29 @@ class KeyboardStickersBottomSheetDialogFragment : BottomSheetDialogFragment() {
     }
 
     fun getTopLeftItemScreenLocation(onReady: (IntArray, Int, Int) -> Unit) {
+        val listener = object : ViewTreeObserver.OnGlobalLayoutListener {
+            override fun onGlobalLayout() {
+                val viewHolder = rvStickers.findViewHolderForAdapterPosition(0)
+                if (viewHolder != null && viewHolder.itemView.width > 0) {
+                    rvStickers.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                    val loc = IntArray(2)
+                    viewHolder.itemView.getLocationOnScreen(loc)
+                    onReady(loc, viewHolder.itemView.width, viewHolder.itemView.height)
+                }
+            }
+        }
+        rvStickers.viewTreeObserver.addOnGlobalLayoutListener(listener)
         rvStickers.post {
-            val viewHolder = rvStickers.findViewHolderForAdapterPosition(0)
-            if (viewHolder != null) {
+            val vh = rvStickers.findViewHolderForAdapterPosition(0)
+            if (vh != null && vh.itemView.width > 0) {
+                try {
+                    rvStickers.viewTreeObserver.removeOnGlobalLayoutListener(listener)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
                 val loc = IntArray(2)
-                viewHolder.itemView.getLocationOnScreen(loc)
-                onReady(loc, viewHolder.itemView.width, viewHolder.itemView.height)
-            } else {
-                val loc = IntArray(2)
-                rvStickers.getLocationOnScreen(loc)
-                onReady(loc, rvStickers.width / 2, 120)
+                vh.itemView.getLocationOnScreen(loc)
+                onReady(loc, vh.itemView.width, vh.itemView.height)
             }
         }
     }

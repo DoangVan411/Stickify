@@ -11,7 +11,6 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
-import android.widget.Toast
 import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
 import androidx.fragment.app.DialogFragment
@@ -24,8 +23,9 @@ import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.textfield.TextInputEditText
 import com.jetpack.stickify.R
 import com.jetpack.stickify.domain.model.StickerProject
-import com.jetpack.stickify.domain.usecase.GetFavoritesUseCase
+import com.jetpack.stickify.domain.repository.ProjectRepository
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -33,7 +33,7 @@ import javax.inject.Inject
 class SelectStickersDialogFragment : DialogFragment() {
 
     @Inject
-    lateinit var getFavoritesUseCase: GetFavoritesUseCase
+    lateinit var projectRepository: ProjectRepository
 
     private var initiallySelectedIds: ArrayList<String> = arrayListOf()
     private val currentSelectedIds = mutableSetOf<String>()
@@ -105,20 +105,17 @@ class SelectStickersDialogFragment : DialogFragment() {
             dismiss()
         }
 
-        // Load available stickers asynchronously inside dialog
+        // Load all available sticker projects asynchronously
         progressBarPicker.isVisible = true
         rvPickerStickers.isVisible = false
 
         viewLifecycleOwner.lifecycleScope.launch {
-            val result = getFavoritesUseCase()
-            progressBarPicker.isVisible = false
-            result.onSuccess { stickers ->
+            projectRepository.getAllProjects().collectLatest { stickers ->
+                progressBarPicker.isVisible = false
                 allAvailableStickers.clear()
                 allAvailableStickers.addAll(stickers)
                 adapter.updateData(stickers)
                 rvPickerStickers.isVisible = true
-            }.onFailure { e ->
-                Toast.makeText(context, "Lỗi tải sticker: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }

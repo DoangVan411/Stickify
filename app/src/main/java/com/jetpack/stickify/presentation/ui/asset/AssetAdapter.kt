@@ -13,7 +13,8 @@ import com.jetpack.stickify.domain.model.AssetEntity
 class AssetAdapter(
     private val assets: List<AssetEntity>,
     private val onAddClick: () -> Unit,
-    private val onItemClick: (AssetEntity) -> Unit
+    private val onItemClick: (AssetEntity) -> Unit,
+    private val onItemLongClick: ((AssetEntity, View) -> Boolean)? = null
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
@@ -42,7 +43,7 @@ class AssetAdapter(
         if (holder is AddViewHolder) {
             holder.bind(onAddClick)
         } else if (holder is ItemViewHolder) {
-            holder.bind(assets[position - 1], onItemClick)
+            holder.bind(assets[position - 1], onItemClick, onItemLongClick)
         }
     }
 
@@ -56,7 +57,11 @@ class AssetAdapter(
         private val ivThumb: ImageView = view.findViewById(R.id.ivAssetThumb)
         private val tvName: TextView = view.findViewById(R.id.tvAssetName)
 
-        fun bind(asset: AssetEntity, onClick: (AssetEntity) -> Unit) {
+        fun bind(
+            asset: AssetEntity,
+            onClick: (AssetEntity) -> Unit,
+            onLongClick: ((AssetEntity, View) -> Boolean)?
+        ) {
             tvName.text = asset.title
 
             val resId = when (asset.path) {
@@ -75,15 +80,18 @@ class AssetAdapter(
             }
 
             if (resId != 0) {
-            ivThumb.setImageResource(resId)
-        } else {
-            Glide.with(itemView.context)
-                .load(asset.path)
-                .placeholder(R.drawable.ic_sticker_cat)
-                .into(ivThumb)
-        }
+                ivThumb.setImageResource(resId)
+            } else {
+                Glide.with(itemView.context)
+                    .load(asset.path)
+                    .placeholder(R.drawable.ic_sticker_cat)
+                    .into(ivThumb)
+            }
 
             itemView.setOnClickListener { onClick(asset) }
+            itemView.setOnLongClickListener { view ->
+                onLongClick?.invoke(asset, view) ?: false
+            }
         }
     }
 }

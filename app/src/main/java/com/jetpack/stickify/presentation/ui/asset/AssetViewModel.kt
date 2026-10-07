@@ -3,6 +3,7 @@ package com.jetpack.stickify.presentation.ui.asset
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jetpack.stickify.domain.model.AssetEntity
+import com.jetpack.stickify.domain.repository.AssetRepository
 import com.jetpack.stickify.domain.usecase.GetAssetsUseCase
 import com.jetpack.stickify.domain.usecase.SaveAssetUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,7 +25,8 @@ data class AssetUiState(
 @HiltViewModel
 class AssetViewModel @Inject constructor(
     private val getAssetsUseCase: GetAssetsUseCase,
-    private val saveAssetUseCase: SaveAssetUseCase
+    private val saveAssetUseCase: SaveAssetUseCase,
+    private val assetRepository: AssetRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AssetUiState())
@@ -63,6 +65,18 @@ class AssetViewModel @Inject constructor(
                 createdAt = System.currentTimeMillis()
             )
             val result = saveAssetUseCase(asset)
+            if (result.isSuccess) {
+                loadAssets()
+                onResult(true)
+            } else {
+                onResult(false)
+            }
+        }
+    }
+
+    fun deleteAsset(assetId: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val result = assetRepository.deleteAsset(assetId)
             if (result.isSuccess) {
                 loadAssets()
                 onResult(true)

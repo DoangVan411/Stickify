@@ -104,6 +104,17 @@ class HomeActivity : AppCompatActivity() {
         selectTab(BottomNavTab.HOME)
     }
 
+    fun setBottomBarVisible(visible: Boolean) {
+        val layoutBar = binding.layoutBottomBar
+        @Suppress("UNCHECKED_CAST")
+        val behavior = (layoutBar.layoutParams as? CoordinatorLayout.LayoutParams)?.behavior as? HideBottomViewOnScrollBehavior<LinearLayout>
+        if (visible) {
+            behavior?.slideUp(layoutBar)
+        } else {
+            behavior?.slideDown(layoutBar)
+        }
+    }
+
     private fun selectTab(tab: BottomNavTab) {
         currentTab = tab
 

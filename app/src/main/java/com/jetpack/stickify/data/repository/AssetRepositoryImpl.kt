@@ -37,6 +37,15 @@ class AssetRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun deleteAsset(id: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            assetDao.deleteAssetById(id)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     override suspend fun seedDefaultAssetsIfNeeded() = withContext(Dispatchers.IO) {
         try {
             if (assetDao.getAssetCount() > 0) return@withContext

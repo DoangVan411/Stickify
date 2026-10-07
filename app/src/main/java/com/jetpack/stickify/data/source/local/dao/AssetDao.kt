@@ -20,4 +20,7 @@ interface AssetDao {
 
     @Query("SELECT COUNT(*) FROM assets")
     suspend fun getAssetCount(): Int
+
+    @Query("DELETE FROM assets WHERE id = :id")
+    suspend fun deleteAssetById(id: String)
 }

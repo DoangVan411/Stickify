@@ -42,6 +42,8 @@ class CutoutActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_IMAGE_URI = "extra_image_uri"
         const val EXTRA_CROPPED_IMAGE_URI = "extra_cropped_image_uri"
+        const val EXTRA_IS_ASSET_MODE = "extra_is_asset_mode"
+        const val EXTRA_ASSET_CATEGORY = "extra_asset_category"
     }
 
     private lateinit var cutOutBinding:ActivityCutoutBinding
@@ -211,11 +213,22 @@ class CutoutActivity : AppCompatActivity() {
                     ImageUtils.saveBitmapAndGetUri(this@CutoutActivity, cropped)
                 }
 
-                val intent = Intent(this@CutoutActivity, StickerEditActivity::class.java).apply {
-                    putExtra(EXTRA_CROPPED_IMAGE_URI, croppedUri)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                val isAssetMode = intent.getBooleanExtra(EXTRA_IS_ASSET_MODE, false)
+                if (isAssetMode) {
+                    val resultIntent = Intent().apply {
+                        putExtra(EXTRA_CROPPED_IMAGE_URI, croppedUri)
+                        val cat = intent.getStringExtra(EXTRA_ASSET_CATEGORY)
+                        if (cat != null) putExtra(EXTRA_ASSET_CATEGORY, cat)
+                    }
+                    setResult(RESULT_OK, resultIntent)
+                    finish()
+                } else {
+                    val intent = Intent(this@CutoutActivity, StickerEditActivity::class.java).apply {
+                        putExtra(EXTRA_CROPPED_IMAGE_URI, croppedUri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    editStickerLauncher.launch(intent)
                 }
-                editStickerLauncher.launch(intent)
             } catch (e: Exception) {
                 Toast.makeText(this@CutoutActivity, "Lỗi khi cắt ảnh: ${e.message}", Toast.LENGTH_LONG).show()
                 setButtonsEnabled(true)

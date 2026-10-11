@@ -37,13 +37,13 @@
             android:id="@+id/btnCreate"
             android:layout_width="wrap_content"
             android:layout_height="42dp"
+            android:layout_marginVertical="10dp"
             android:layout_marginEnd="16dp"
             android:background="@drawable/bg_button_primary"
             android:text="Tạo"
-            android:layout_marginVertical="10dp"
-            android:textSize="14sp"
             android:textAllCaps="false"
             android:textColor="@android:color/white"
+            android:textSize="14sp"
             app:backgroundTint="@null"
             app:layout_constraintBottom_toBottomOf="@id/btnBack"
             app:layout_constraintEnd_toEndOf="parent"
@@ -65,6 +65,12 @@
                 android:id="@+id/zoomableView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
+
+            <com.jetpack.stickify.presentation.ui.edit_sticker.prompt_sticker.AiRevealSweepView
+                android:id="@+id/aiRevealSweep"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone" />
 
             <LinearLayout
                 android:id="@+id/progressBar"
@@ -135,9 +141,9 @@
             android:id="@+id/promptCard"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:minHeight="52dp"
             android:layout_marginHorizontal="20dp"
             android:layout_marginTop="24dp"
+            android:minHeight="52dp"
             app:cardBackgroundColor="@android:color/white"
             app:cardCornerRadius="26dp"
             app:cardElevation="6dp"
@@ -166,8 +172,8 @@
                     android:id="@+id/etPrompt"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
                     android:layout_marginHorizontal="8dp"
+                    android:layout_weight="1"
                     android:background="@android:color/transparent"
                     android:hint="Tạo sticker động, chỉ với vài dòng..."
                     android:inputType="textMultiLine"
@@ -223,6 +229,7 @@
         <!-- Lớp phủ tối khi AI đang tạo sticker.
              elevation (5dp) < promptCard (6dp) nên promptCard vẫn nằm trên và giữ nguyên.
              clickable để chặn mọi thao tác phía dưới. -->
+        <!-- Lớp phủ tối toàn màn hình khi AI đang tạo sticker -->
         <FrameLayout
             android:id="@+id/aiLoadingOverlay"
             android:layout_width="0dp"
@@ -235,17 +242,39 @@
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent">
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Progress Layout căn giữa đúng vùng previewContainer / zoomableView -->
+        <LinearLayout
+            android:id="@+id/progressLayout"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:elevation="6dp"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="@+id/previewContainer"
+            app:layout_constraintEnd_toEndOf="@+id/previewContainer"
+            app:layout_constraintStart_toStartOf="@+id/previewContainer"
+            app:layout_constraintTop_toTopOf="@+id/previewContainer">
 
             <com.airbnb.lottie.LottieAnimationView
                 android:id="@+id/aiLoadingLottie"
                 android:layout_width="100dp"
                 android:layout_height="100dp"
-                android:layout_gravity="center"
                 app:lottie_fileName="anim_loading.json"
                 app:lottie_loop="true" />
 
-        </FrameLayout>
+            <TextView
+                android:id="@+id/tvAiLoadingProgress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Đang tạo sticker AI... (0%)"
+                android:textColor="@android:color/white"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
 
         <!-- Quầng sáng sóng biển nhòe ra ngoài promptCard.
              Cùng parent với promptCard, elevation 5.5dp: trên lớp phủ tối (5dp), dưới card (6dp). -->

@@ -57,6 +57,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import com.jetpack.stickify.presentation.ui.edit_sticker.utils.PromptUtils
 /**
  * Màn hình "Chỉnh sửa" sticker:
  * - Nhận ảnh đã cắt qua EXTRA_CROPPED_IMAGE_URI (từ CutoutActivity).
@@ -112,6 +113,7 @@ class StickerEditActivity : AppCompatActivity() {
 
     // true khi AI đang tạo sticker (hiện viền chạy + lớp phủ tối)
     private var isAiGenerating = false
+    private var pendingReveal = false
 
     // Viền xanh-cam: gắn làm foreground của promptCard nên luôn bám sát card
     private lateinit var aiGlow: AiGlowBorderDrawable
@@ -185,12 +187,22 @@ class StickerEditActivity : AppCompatActivity() {
         }
     }
 
-    // Trong StickerEditActivity.kt
     private fun renderAiState(state: AiStickerUiState) {
         lastAiState = state
-        setAiLoading(state.isGenerating)
+        setAiLoading(state.isGenerating, state.percent, state.message)
 
-        if (state.animation !== shownAnimation) {
+        if (pendingReveal && !state.isGenerating) {
+            pendingReveal = false
+            if (state.error == null && state.animation != null) {
+                binding.aiRevealSweep.play(startDelayMs = 220L) { Log.d("AiReveal", "sweep end") }
+            } else {
+                binding.aiRevealSweep.discardSnapshot()
+            }
+        }
+        val isNewResult = state.animation !== shownAnimation
+
+
+        if (isNewResult) {
             shownAnimation = state.animation
 
             // CHỈ CẦN THIẾT LẬP LẠI KHUNG HÌNH AI CHO VIEW NHƯ CŨ
@@ -201,9 +213,13 @@ class StickerEditActivity : AppCompatActivity() {
 
             binding.zoomableView.setAiAnimation(state.animation?.frames, state.animation?.frameDelayMs ?: 83)
         }
-
-        state.error?.let {
-            Toast.makeText(this, "Lỗi AI: $it", Toast.LENGTH_LONG).show()
+        //xử lý lỗi
+        state.error?.let { errorMessage ->
+            PromptUtils.showErrorDialog(
+                supportFragmentManager,
+                "Lỗi tạo Sticker",
+                errorMessage
+            )
             aiViewModel.consumeError()
         }
         refreshUndoRedo()
@@ -248,6 +264,7 @@ class StickerEditActivity : AppCompatActivity() {
     override fun onDestroy() {
         if (::aiGlow.isInitialized) aiGlow.release()
         binding.aiGlowHalo.release()
+        binding.aiRevealSweep.release()
         super.onDestroy()
     }
 
@@ -496,10 +513,19 @@ class StickerEditActivity : AppCompatActivity() {
 
         binding.btnSendPrompt.setOnClickListener {
             val prompt = binding.etPrompt.text?.toString()?.trim().orEmpty()
-            if (prompt.isEmpty()) {
-                Toast.makeText(this, "Hãy nhập mô tả cho sticker", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
+
+            // 1. Kiểm tra tính hợp lệ bằng Utils
+            when (val validation = PromptUtils.validatePrompt(prompt)) {
+                is PromptUtils.ValidationResult.Invalid -> {
+                    // Nếu không hợp lệ, hiển thị Dialog
+                    PromptUtils.showErrorDialog(supportFragmentManager, validation.title, validation.message)
+                    return@setOnClickListener
+                }
+                is PromptUtils.ValidationResult.Valid -> {
+                    // Hợp lệ thì đi tiếp
+                }
             }
+
             if (isAiGenerating) return@setOnClickListener
             startAiGeneration(prompt)
         }
@@ -517,6 +543,10 @@ class StickerEditActivity : AppCompatActivity() {
             return
         }
 
+        binding.aiRevealSweep.captureSnapshot(binding.zoomableView)
+        pendingReveal = true
+        Log.d("AiReveal", "snapshot captured")
+
         val editVm = editViewModel   // chỉ capture ViewModel, không capture Activity (job sống qua xoay màn hình)
         aiViewModel.generate(source, prompt) {
             val before = editVm.undoDepth
@@ -525,7 +555,34 @@ class StickerEditActivity : AppCompatActivity() {
         }
     }
 
-    private fun setAiLoading(loading: Boolean) {
+    private fun setAiLoading(loading: Boolean, percent: Int = 0, message: String = "") {
+        val displayMsg = if (message.isNotBlank()) "$message..." else "Đang tạo sticker AI..."
+
+        // Nếu đang trong trạng thái loading và tiếp tục nhận progress update
+        if (loading && isAiGenerating) {
+            if (binding.tvAiLoadingProgress.text.toString() != displayMsg) {
+                // Hủy animation cũ nếu có để tránh xung đột khi percent về quá nhanh
+                binding.tvAiLoadingProgress.animate().cancel()
+
+                // 1. Trượt text cũ lên trên và mờ dần (tốn một nửa thời gian)
+                binding.tvAiLoadingProgress.animate()
+                    .translationY(-40f)
+                    .alpha(0f)
+                    .setDuration(100)
+                    .withEndAction {
+                        // 2. Cập nhật text mới, dời View xuống dưới và trượt lên vị trí gốc
+                        binding.tvAiLoadingProgress.text = displayMsg
+                        binding.tvAiLoadingProgress.translationY = 40f
+                        binding.tvAiLoadingProgress.animate()
+                            .translationY(0f)
+                            .alpha(1f)
+                            .setDuration(250)
+                            .start()
+                    }.start()
+            }
+            return
+        }
+
         if (isAiGenerating == loading) return
         isAiGenerating = loading
 
@@ -540,15 +597,27 @@ class StickerEditActivity : AppCompatActivity() {
                 visibility = View.VISIBLE
                 animate().alpha(1f).setDuration(250).start()
             }
+            binding.progressLayout.apply {
+                alpha = 0f
+                visibility = View.VISIBLE
+                animate().alpha(1f).setDuration(250).start()
+            }
             binding.aiLoadingLottie.playAnimation()
             aiGlow.start()
             binding.aiGlowHalo.start()
+
+            binding.tvAiLoadingProgress.text = displayMsg
         } else {
             aiGlow.stop()
             binding.aiGlowHalo.stop()
             binding.aiLoadingOverlay.animate().alpha(0f).setDuration(200).withEndAction {
                 if (!isAiGenerating) {
                     binding.aiLoadingOverlay.visibility = View.GONE
+                }
+            }.start()
+            binding.progressLayout.animate().alpha(0f).setDuration(200).withEndAction {
+                if (!isAiGenerating) {
+                    binding.progressLayout.visibility = View.GONE
                     binding.aiLoadingLottie.cancelAnimation()
                 }
             }.start()

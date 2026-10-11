@@ -1380,7 +1380,7 @@ class ZoomableStickerView @JvmOverloads constructor(
                     invalidate()
                     return true
                 } else {
-                    // Nhấn vào vùng trống → bỏ chọn decor, bắt đầu pan
+                    // Nhấn vào vùng trống bỏ chọn decor, bắt đầu pan
                     if (selectedDecor != null) {
                         selectedDecor = null
                         invalidate()

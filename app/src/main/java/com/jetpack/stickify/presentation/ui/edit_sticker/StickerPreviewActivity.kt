@@ -174,17 +174,22 @@ class StickerPreviewActivity : AppCompatActivity() {
         }
         container.addView(animView)
 
-        val targetScaleX = if (startW > 0) targetW.toFloat() / startW else 0.35f
-        val targetScaleY = if (startH > 0) targetH.toFloat() / startH else 0.35f
+        val scale = targetW.toFloat() / startW
 
-        val adjustedEndX = endX + (targetW - startW) / 2f
-        val adjustedEndY = endY + (targetH - startH) / 2f
+        val targetCenterX = endX + targetW / 2f
+        val targetCenterY = endY + targetH / 2f
+
+        val startCenterX = startX + startW / 2f
+        val startCenterY = startY + startH / 2f
+
+        val translationX = targetCenterX - startCenterX
+        val translationY = targetCenterY - startCenterY
 
         animView.animate()
-            .x(adjustedEndX)
-            .y(adjustedEndY)
-            .scaleX(targetScaleX)
-            .scaleY(targetScaleY)
+            .translationX(translationX)
+            .translationY(translationY)
+            .scaleX(scale)
+            .scaleY(scale)
             .alpha(1.0f)
             .setDuration(1400)
             .setInterpolator(AccelerateDecelerateInterpolator())

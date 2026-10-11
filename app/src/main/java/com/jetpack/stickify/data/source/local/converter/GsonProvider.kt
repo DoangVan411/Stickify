@@ -29,6 +29,7 @@ object GsonProvider {
             .registerSubtype(ReorderLayerAction::class.java, "ReorderLayerAction")
             .registerSubtype(ChangeBorderAction::class.java, "ChangeBorderAction")
             .registerSubtype(ChangeSpeedAction::class.java, "ChangeSpeedAction")
+            .registerSubtype(ChangeEffectAction::class.java, "ChangeEffectAction")
 
         GsonBuilder()
             .registerTypeAdapterFactory(assetRefAdapter)

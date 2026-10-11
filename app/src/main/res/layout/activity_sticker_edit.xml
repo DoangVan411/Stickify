@@ -60,19 +60,39 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/btnBack">
 
+
             <com.jetpack.stickify.presentation.ui.edit_sticker.ZoomableStickerView
                 android:id="@+id/zoomableView"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
 
-            <com.airbnb.lottie.LottieAnimationView
+            <LinearLayout
                 android:id="@+id/progressBar"
-                android:layout_width="100dp"
-                android:layout_height="100dp"
-                android:layout_gravity="center"
-                app:lottie_autoPlay="true"
-                app:lottie_fileName="anim_loading.json"
-                app:lottie_loop="true" />
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#8B000000"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <com.airbnb.lottie.LottieAnimationView
+                    android:layout_width="100dp"
+                    android:layout_height="100dp"
+                    app:lottie_autoPlay="true"
+                    app:lottie_fileName="anim_loading.json"
+                    app:lottie_loop="true" />
+
+                <TextView
+                    android:id="@+id/tvLoadingMessage"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="Đang tải..."
+                    android:textColor="@android:color/white"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/undoRedoGroup"
@@ -168,6 +188,7 @@
             </LinearLayout>
 
         </androidx.cardview.widget.CardView>
+
         <!-- Thay thế HorizontalScrollView và LinearLayout cũ bằng Custom View -->
         <com.jetpack.stickify.presentation.ui.edit_sticker.custom_view.EditorPanelView
             android:id="@+id/editorPanel"
@@ -243,7 +264,6 @@
         <include
             android:id="@+id/addTextLayout"
             layout="@layout/layout_add_text" />
-
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

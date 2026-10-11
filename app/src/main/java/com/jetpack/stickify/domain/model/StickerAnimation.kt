@@ -33,3 +33,12 @@ enum class StickerAnimationType(
 
     val isAnimated: Boolean get() = this != NONE
 }
+
+fun StickerAnimationType.toPlaybackSpeed(): PlaybackSpeed = when (this) {
+    StickerAnimationType.NONE -> PlaybackSpeed.X1
+    StickerAnimationType.BOUNCE -> PlaybackSpeed.X1
+    StickerAnimationType.SHAKE -> PlaybackSpeed.X2
+    StickerAnimationType.SPIN -> PlaybackSpeed.X2
+    StickerAnimationType.PULSE -> PlaybackSpeed.X4
+    StickerAnimationType.WOBBLE -> PlaybackSpeed.X4
+}

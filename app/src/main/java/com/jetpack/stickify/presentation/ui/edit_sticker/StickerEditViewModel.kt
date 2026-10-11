@@ -4,6 +4,7 @@ import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextFont
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextStyleSpec
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
 import androidx.lifecycle.ViewModel
@@ -13,6 +14,8 @@ import com.jetpack.stickify.domain.model.*
 import com.jetpack.stickify.domain.usecase.GetProjectByIdUseCase
 import com.jetpack.stickify.domain.usecase.SaveProjectUseCase
 import com.jetpack.stickify.domain.usecase.UpdateProjectThumbnailUseCase
+import com.jetpack.stickify.presentation.ui.edit_sticker.prompt_sticker.AiEntryData
+import com.jetpack.stickify.presentation.ui.edit_sticker.prompt_sticker.EditSpan
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +25,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.util.Locale
 import javax.inject.Inject
 
 /**
@@ -61,6 +65,9 @@ class StickerEditViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(StickerEditUiState())
     val uiState: StateFlow<StickerEditUiState> = _uiState.asStateFlow()
+
+    /** Số bước trong stack Undo; AiStickerViewModel dùng để đồng bộ Undo/Redo của kết quả AI với các chỉnh sửa layer. */
+    val undoDepth: Int get() = _uiState.value.editorSession.history.undo.size
 
     // Danh sách decoration vẽ trang trí (Drawn)
     private val _drawnDecorations = MutableStateFlow(
@@ -112,18 +119,20 @@ class StickerEditViewModel @Inject constructor(
         _uiState.update { it.copy(error = null) }
     }
 
-    fun loadProject(projectId: String) {
+    fun loadProject(
+        context: Context? = null,
+        projectId: String,
+        onProjectLoaded: (SubjectLayer?, BorderStyle?, Playback?, List<Pair<EditSpan, AiAnimation>>) -> Unit = { _, _, _, _ -> }
+    ) {
         if (projectId.isBlank()) return
-        // Đã load rồi (xoay màn hình) -> KHÔNG load lại, nếu không sẽ mất các chỉnh sửa chưa lưu + lịch sử undo/redo.
         if (loadedProjectId == projectId) return
         loadedProjectId = projectId
+
+        val appContext = context?.applicationContext
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, projectId = projectId, loadFailed = false) }
             try {
-                // Chỉ lấy MỘT lần. Trước đây dùng collectLatest trên Flow của Room: mỗi lần DB đổi
-                // (kể cả khi cập nhật thumbnail ở onStop) session bị ghi đè bằng bản trong DB
-                // => mất chỉnh sửa chưa lưu và mất lịch sử undo/redo.
                 val project = getProjectByIdUseCase.execute(projectId).firstOrNull()
                 if (project == null) {
                     loadedProjectId = null
@@ -133,6 +142,13 @@ class StickerEditViewModel @Inject constructor(
                     return@launch
                 }
                 isPersisted = true
+
+                val restoredAi = if (appContext != null && project.content.aiAnimations.isNotEmpty()) {
+                    withContext(Dispatchers.IO) {
+                        loadAiAnimations(appContext, project.content.aiAnimations)
+                    }
+                } else emptyList()
+
                 val session = EditorSession(content = project.content, history = project.history)
                 _uiState.update {
                     it.copy(
@@ -148,6 +164,9 @@ class StickerEditViewModel @Inject constructor(
                         revision = it.revision + 1
                     )
                 }
+
+                val subjectLayer = project.content.layers.filterIsInstance<SubjectLayer>().firstOrNull()
+                onProjectLoaded(subjectLayer, project.content.border, project.content.playback, restoredAi)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -157,11 +176,39 @@ class StickerEditViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Khởi tạo project mới từ ảnh cắt. Ảnh được COPY vào bộ nhớ riêng của app
-     * (filesDir/projects/<id>/...) và layer chỉ lưu đường dẫn tương đối, vì Uri tạm / cache
-     * sẽ mất hiệu lực khi mở lại project => đây là lý do project cũ mở ra bị trống.
-     */
+    private fun loadAiAnimations(
+        context: Context,
+        specs: List<AiAnimationSpec>
+    ): List<Pair<EditSpan, AiAnimation>> {
+        val result = mutableListOf<Pair<EditSpan, AiAnimation>>()
+
+        for (spec in specs) {
+            val dir = File(context.filesDir, spec.relativeDir)
+            if (!dir.exists() || !dir.isDirectory) continue
+
+            val frameFiles = dir.listFiles { f -> f.isFile && f.name.endsWith(".png") }?.sortedBy { it.name } ?: continue
+            if (frameFiles.isEmpty()) continue
+
+            val frames = mutableListOf<Bitmap>()
+            val options = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
+
+            for (file in frameFiles) {
+                val bmp = BitmapFactory.decodeFile(file.absolutePath, options)
+                if (bmp != null) {
+                    frames.add(bmp)
+                }
+            }
+
+            if (frames.isNotEmpty()) {
+                val span = EditSpan(spec.spanBefore, spec.spanAfter)
+                val anim = AiAnimation(frames, spec.frameDelayMs)
+                result.add(Pair(span, anim))
+            }
+        }
+
+        return result
+    }
+
     fun initNewProject(context: Context, projectId: String, imageUriString: String) {
         if (loadedProjectId == projectId) return
         loadedProjectId = projectId
@@ -183,14 +230,13 @@ class StickerEditViewModel @Inject constructor(
                 transform = Transform(cx = 256f, cy = 256f, scale = 1f),
                 visible = true,
                 source = CustomAsset(relativePath),
+                cutoutPath = relativePath,
                 styledPath = relativePath
             )
             val newContent = ProjectContent(
                 canvas = CanvasSpec(width = 512, height = 512),
                 layers = listOf(subjectLayer)
             )
-            // Layer chủ thể là NỀN của project => không đưa vào lịch sử,
-            // nếu không người dùng có thể Undo và xóa mất chủ thể.
             val newHistory = EditHistory(undo = emptyList(), redo = emptyList())
             val newSession = EditorSession(content = newContent, history = newHistory)
             _uiState.update {
@@ -214,9 +260,15 @@ class StickerEditViewModel @Inject constructor(
         "projects/$projectId/subject_source.png"
     }.getOrNull()
 
+    private fun writeCoreBitmap(context: Context, projectId: String, fileName: String, bitmap: Bitmap): String? = runCatching {
+        val dir = File(context.filesDir, "projects/$projectId").apply { mkdirs() }
+        val file = File(dir, fileName)
+        FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        "projects/$projectId/$fileName"
+    }.getOrNull()
+
     private fun writeStyledBitmap(context: Context, projectId: String, bitmap: Bitmap): String? = runCatching {
         val dir = File(context.filesDir, "projects/$projectId").apply { mkdirs() }
-        // Tên file duy nhất mỗi lần lưu để cache bitmap trong ZoomableStickerView không bị cũ.
         val name = "subject_styled_${System.currentTimeMillis()}.png"
         val file = File(dir, name)
         FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
@@ -224,13 +276,12 @@ class StickerEditViewModel @Inject constructor(
         "projects/$projectId/$name"
     }.getOrNull()
 
-    /** Nhiều action liên tiếp được Undo/Redo cùng lúc (vd: 1 nét vẽ brush gồm nhiều con dấu). Chỉ tồn tại trong RAM. */
     private data class ActionGroup(val start: Int, val count: Int)
     private val groups = mutableListOf<ActionGroup>()
 
     private fun performInternal(session: EditorSession, action: EditAction) {
         val before = session.history.undo.size
-        groups.removeAll { it.start >= before } // các nhóm nằm trong nhánh redo đã bị loại bỏ
+        groups.removeAll { it.start >= before }
         session.perform(action)
     }
 
@@ -297,8 +348,6 @@ class StickerEditViewModel @Inject constructor(
         publish(currentSession)
     }
 
-    // ---------- Thao tác trên layer decor/chữ từ ZoomableStickerView ----------
-
     private fun Transform.copyWith(
         cx: Float = this.cx,
         cy: Float = this.cy,
@@ -316,7 +365,6 @@ class StickerEditViewModel @Inject constructor(
         else -> null
     }
 
-    /** Gọi khi người dùng kéo/xoay/phóng xong 1 layer. */
     fun updateLayerTransform(layerId: String, cx: Float, cy: Float, scale: Float, rotationDeg: Float) {
         val before = _uiState.value.editorSession.content.layers.find { it.id == layerId } ?: return
         val after = before.withTransform(before.transform.copyWith(cx, cy, scale, rotationDeg)) ?: return
@@ -350,7 +398,6 @@ class StickerEditViewModel @Inject constructor(
         "custom_decorations/$name"
     }.getOrNull()
 
-    /** Thêm 1 decor (từ DecorToolFragment) vào project ở giữa canvas. Bitmap được lưu ra filesDir. */
     fun addDecorationFromBitmap(context: Context, bitmap: Bitmap, layerId: String) {
         val appContext = context.applicationContext
         viewModelScope.launch {
@@ -376,7 +423,6 @@ class StickerEditViewModel @Inject constructor(
         }
     }
 
-    /** Thêm các con dấu của 1 nét vẽ brush. Cả nét vẽ được Undo/Redo như 1 thao tác. */
     fun addStampLayers(context: Context, bitmap: Bitmap, stamps: List<ZoomableStickerView.StampSpec>) {
         if (stamps.isEmpty()) return
         val appContext = context.applicationContext
@@ -404,7 +450,6 @@ class StickerEditViewModel @Inject constructor(
     }
 
     fun captureAndSaveThumbnail(projectId: String, bitmap: Bitmap) {
-        // Project chưa có trong DB (chưa lưu / bị hủy) thì không cập nhật thumbnail.
         if (!isPersisted) {
             if (!bitmap.isRecycled) bitmap.recycle()
             return
@@ -436,76 +481,164 @@ class StickerEditViewModel @Inject constructor(
         StickerAnimationType.WOBBLE -> PlaybackSpeed.X4
     }
 
+    private fun saveAiAnimations(
+        context: Context,
+        projectId: String,
+        entries: List<AiEntryData>
+    ): List<AiAnimationSpec> {
+        val baseDir = File(context.filesDir, "projects/$projectId/ai_animations").apply { mkdirs() }
+        val activeDirs = mutableSetOf<String>()
+        val specs = mutableListOf<AiAnimationSpec>()
+
+        entries.forEachIndexed { index, entry ->
+            val dirName = "anim_$index"
+            val animDir = File(baseDir, dirName).apply { mkdirs() }
+            activeDirs.add(dirName)
+
+            // Dọn dẹp frame cũ trong thư mục này trước khi ghi
+            animDir.listFiles()?.forEach { it.delete() }
+
+            val frames = entry.animation.frames
+            frames.forEachIndexed { fIdx, frameBmp ->
+                val frameFile = File(animDir, String.format(Locale.US, "frame_%03d.png", fIdx))
+                FileOutputStream(frameFile).use { out ->
+                    frameBmp.compress(Bitmap.CompressFormat.PNG, 100, out)
+                }
+            }
+
+            val relativePath = "projects/$projectId/ai_animations/$dirName"
+            specs.add(
+                AiAnimationSpec(
+                    relativeDir = relativePath,
+                    frameCount = frames.size,
+                    frameDelayMs = entry.animation.frameDelayMs,
+                    spanBefore = entry.span.before,
+                    spanAfter = entry.span.after
+                )
+            )
+        }
+
+        // Dọn dẹp các thư mục animation cũ không còn được tham chiếu
+        baseDir.listFiles { f -> f.isDirectory && f.name !in activeDirs }?.forEach { oldDir ->
+            oldDir.deleteRecursively()
+        }
+
+        return specs
+    }
+
     /**
      * Lưu project.
      * @param border null = giữ nguyên viền đang có trong project.
-     * @param animationType null = giữ nguyên playback đang có.
-     * @param styledBitmap ảnh chủ thể cuối cùng (đã viền/cartoon/decor...) -> ghi ra filesDir và gắn vào SubjectLayer.
-     * @param thumbnailBitmap thumbnail, được cập nhật SAU khi lưu project để không bị ghi đè bởi thumbnailPath cũ.
+     * @param animationType StickerAnimationType thực tế đang chọn.
+     * @param selectedStyle StickerStyle đang chọn (ORIGINAL, BORDER, CARTOON).
+     * @param originalCoreBitmap Bitmap gốc chưa viền.
+     * @param cartoonCoreBitmap Bitmap cartoon chưa viền.
+     * @param styledBitmap Bitmap đã xử lý style cuối cùng.
+     * @param thumbnailBitmap Thumbnail preview.
      */
     fun saveProjectWithDetails(
         context: Context?,
         projectId: String,
         border: BorderStyle?,
-        animationType: StickerAnimationType?,
+        animationType: StickerAnimationType,
+        selectedStyle: StickerStyle = StickerStyle.ORIGINAL,
+        originalCoreBitmap: Bitmap? = null,
+        cartoonCoreBitmap: Bitmap? = null,
         styledBitmap: Bitmap? = null,
-        thumbnailBitmap: Bitmap? = null
+        thumbnailBitmap: Bitmap? = null,
+        aiEntries: List<AiEntryData> = emptyList(),
+        hasUndoneAi: Boolean = false
     ) {
         val appContext = context?.applicationContext
         val state = _uiState.value
         val session = state.editorSession
 
         viewModelScope.launch {
-            // Activity finish() => viewModelScope bị hủy; NonCancellable để lưu DB luôn chạy xong.
             withContext(NonCancellable) {
                 _uiState.update { it.copy(projectId = projectId, isLoading = true, isSaveSuccess = false) }
                 try {
                     var content = session.content
 
-                    // 1. Gắn ảnh chủ thể đã xử lý vào SubjectLayer (không đưa vào lịch sử Undo)
+                    // 1a. Ghi core ORIGINAL & CARTOON ra đĩa nếu có
+                    var cutoutRel: String? = null
+                    var cartoonRel: String? = null
+                    if (originalCoreBitmap != null && appContext != null) {
+                        cutoutRel = withContext(Dispatchers.IO) { writeCoreBitmap(appContext, projectId, "subject_cutout.png", originalCoreBitmap) }
+                    }
+                    if (cartoonCoreBitmap != null && appContext != null) {
+                        cartoonRel = withContext(Dispatchers.IO) { writeCoreBitmap(appContext, projectId, "subject_cartoon.png", cartoonCoreBitmap) }
+                    }
+
+                    // 1b. Ghi ảnh styled (đã viền/cartoon...)
+                    var styledRel: String? = null
                     if (styledBitmap != null && appContext != null) {
-                        val rel = withContext(Dispatchers.IO) { writeStyledBitmap(appContext, projectId, styledBitmap) }
-                        if (rel != null) {
-                            var replaced = false
-                            content = content.copy(
-                                layers = content.layers.map { layer: Layer ->
-                                    if (!replaced && layer is SubjectLayer) {
-                                        replaced = true
-                                        layer.copy(styledPath = rel)
-                                    } else layer
-                                }
-                            )
+                        styledRel = withContext(Dispatchers.IO) { writeStyledBitmap(appContext, projectId, styledBitmap) }
+                    }
+
+                    val subjectStyle = when (selectedStyle) {
+                        StickerStyle.ORIGINAL -> SubjectStyle.ORIGINAL
+                        StickerStyle.BORDER -> SubjectStyle.OUTLINE
+                        StickerStyle.CARTOON -> SubjectStyle.CARTOON
+                    }
+
+                    var replaced = false
+                    content = content.copy(
+                        layers = content.layers.map { layer: Layer ->
+                            if (!replaced && layer is SubjectLayer) {
+                                replaced = true
+                                layer.copy(
+                                    style = subjectStyle,
+                                    cutoutPath = cutoutRel ?: layer.cutoutPath,
+                                    cartoonCorePath = cartoonRel ?: layer.cartoonCorePath,
+                                    styledPath = styledRel ?: layer.styledPath
+                                )
+                            } else layer
                         }
+                    )
+
+                    // 1c. Ghi các animation AI đang applied ra đĩa
+                    if (appContext != null) {
+                        val specs = withContext(Dispatchers.IO) {
+                            saveAiAnimations(appContext, projectId, aiEntries)
+                        }
+                        content = content.copy(aiAnimations = specs)
                     }
 
-                    // 2. Viền / playback: ghi nhận qua EditAction để lịch sử khớp với nội dung
-                    val working = EditorSession(content = content, history = session.history)
-                    if (border != null && content.border != border) {
-                        working.perform(ChangeBorderAction(before = content.border, after = border))
+                    // 1d. Nhất quán lịch sử
+                    var historyToSave = session.history
+                    if (hasUndoneAi) {
+                        historyToSave = historyToSave.copy(redo = emptyList())
                     }
-                    val newSpeed = animationType?.let { speedFor(it) }
-                    if (newSpeed != null && content.playback?.speed != newSpeed) {
-                        working.perform(
-                            ChangeSpeedAction(before = content.playback?.speed ?: PlaybackSpeed.X1, after = newSpeed)
-                        )
-                    }
-                    // Phòng trường hợp action.apply() không xử lý border/playback đang null
-                    var finalContent = working.content
-                    if (border != null && finalContent.border != border) {
-                        finalContent = finalContent.copy(border = border)
-                    }
-                    if (newSpeed != null && finalContent.playback?.speed != newSpeed) {
-                        finalContent = finalContent.copy(
-                            playback = Playback(speed = newSpeed, loop = finalContent.playback?.loop ?: true)
-                        )
-                    }
-                    val finalSession = EditorSession(content = finalContent, history = working.history)
 
-                    // 3. Lưu DB
+                    // 2. Viền & Playback: Ghi TRỰC TIẾP vào content.copy mà KHÔNG gọi working.perform(...)
+                    val newPlayback = Playback(
+                        speed = speedFor(animationType),
+                        loop = true,
+                        animationType = animationType
+                    )
+                    content = content.copy(
+                        border = border ?: content.border,
+                        playback = newPlayback
+                    )
+
+                    val finalSession = EditorSession(content = content, history = historyToSave)
+
+                    // 3. Tính toán ProjectType mới
+                    val currentType = state.projectType
+                    val hasAi = aiEntries.isNotEmpty()
+                    val hasEffect = animationType.isAnimated
+
+                    val newProjectType = when {
+                        currentType == ProjectType.GIF -> ProjectType.GIF
+                        hasAi || hasEffect -> ProjectType.ANIMATED_STICKER
+                        else -> ProjectType.STICKER
+                    }
+
+                    // 4. Lưu DB
                     val result = saveProjectUseCase(
                         projectId = projectId,
                         projectName = state.projectName,
-                        projectType = state.projectType,
+                        projectType = newProjectType,
                         origin = state.origin,
                         thumbnailPath = _uiState.value.thumbnailPath,
                         editorSession = finalSession
@@ -515,7 +648,6 @@ class StickerEditViewModel @Inject constructor(
                         isPersisted = true
                         loadedProjectId = projectId
 
-                        // 4. Thumbnail SAU khi project đã có trong DB
                         if (thumbnailBitmap != null) {
                             withContext(Dispatchers.IO) {
                                 updateProjectThumbnailUseCase(projectId, thumbnailBitmap)
@@ -527,6 +659,7 @@ class StickerEditViewModel @Inject constructor(
                             it.copy(
                                 isLoading = false,
                                 isSaveSuccess = true,
+                                projectType = newProjectType,
                                 editorSession = finalSession,
                                 canUndo = finalSession.history.canUndo,
                                 canRedo = finalSession.history.canRedo,
@@ -547,7 +680,7 @@ class StickerEditViewModel @Inject constructor(
 
     fun saveProject() {
         val pId = _uiState.value.projectId ?: "proj_${System.currentTimeMillis()}"
-        saveProjectWithDetails(context = null, projectId = pId, border = null, animationType = null)
+        saveProjectWithDetails(context = null, projectId = pId, border = null, animationType = StickerAnimationType.NONE)
     }
 
     fun updateBorder(thickness: Float, distance: Float, colorArgb: Int) {
@@ -558,19 +691,16 @@ class StickerEditViewModel @Inject constructor(
         performAction(action)
     }
 
-    fun updateAnimation(animationType: StickerAnimationType) {
+    fun setEffect(type: StickerAnimationType) {
         val currentSession = _uiState.value.editorSession
-        val oldPlayback = currentSession.content.playback
-        val newSpeed = when (animationType) {
-            StickerAnimationType.NONE -> PlaybackSpeed.X1
-            StickerAnimationType.BOUNCE -> PlaybackSpeed.X1
-            StickerAnimationType.SHAKE -> PlaybackSpeed.X2
-            StickerAnimationType.SPIN -> PlaybackSpeed.X2
-            StickerAnimationType.PULSE -> PlaybackSpeed.X4
-            StickerAnimationType.WOBBLE -> PlaybackSpeed.X4
-        }
-        val action = ChangeSpeedAction(before = oldPlayback?.speed ?: PlaybackSpeed.X1, after = newSpeed)
+        val currentType = currentSession.content.playback?.animationType ?: StickerAnimationType.NONE
+        if (currentType == type) return
+        val action = ChangeEffectAction(before = currentType, after = type)
         performAction(action)
+    }
+
+    fun updateAnimation(animationType: StickerAnimationType) {
+        setEffect(animationType)
     }
 
     fun addBuiltinDecoration(assetId: String, packId: String = "pack_default", category: DecorationCategory = DecorationCategory.LABEL) {
@@ -588,10 +718,31 @@ class StickerEditViewModel @Inject constructor(
         performAction(action)
         _uiState.update { it.copy(lastAddedLayerId = newLayerId) }
     }
-    /**
-     * @param color  màu người dùng chọn (màu chữ / nền / viền tùy kiểu).
-     * @param style  font + kiểu nền, được mã hóa vào TextLayer.fontId nên lưu DB + undo/redo được.
-     */
+
+    fun clearAllDecorAndTextWithUndo() {
+        val session = _uiState.value.editorSession
+        val layersToRemove = session.content.layers.filter { it !is SubjectLayer }
+        if (layersToRemove.isEmpty()) return
+
+        val startUndoSize = session.history.undo.size
+
+        for (layer in layersToRemove) {
+            val currentIndex = session.content.layers.indexOfFirst { it.id == layer.id }
+            if (currentIndex >= 0) {
+                performInternal(
+                    session,
+                    RemoveLayerAction(layer = session.content.layers[currentIndex], index = currentIndex)
+                )
+            }
+        }
+
+        if (layersToRemove.size > 1) {
+            groups.add(ActionGroup(startUndoSize, layersToRemove.size))
+        }
+
+        publish(session)
+    }
+
     fun addTextLayer(
         content: String,
         color: Int,
@@ -627,7 +778,6 @@ class StickerEditViewModel @Inject constructor(
 
         val style = newStyle ?: TextStyleSpec.decode(oldLayer.fontId)
 
-        // copy() giữ nguyên toàn bộ Transform (cx, cy, scale, rotationDeg) cũ.
         val newLayer = oldLayer.copy(
             content = newContent,
             fontId = style.encode(),
@@ -636,7 +786,6 @@ class StickerEditViewModel @Inject constructor(
             align = newAlign
         )
 
-        // Không có gì đổi thì không tạo thêm 1 bước trong lịch sử undo
         if (newLayer == oldLayer) return
 
         val action = UpdateLayerAction(before = oldLayer, after = newLayer)

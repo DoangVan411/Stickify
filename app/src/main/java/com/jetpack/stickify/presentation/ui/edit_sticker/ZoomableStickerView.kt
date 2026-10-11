@@ -26,6 +26,7 @@ import kotlinx.coroutines.*
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import com.jetpack.stickify.R
+import com.jetpack.stickify.data.gif.StickerAnimationRenderer
 
 class ZoomableStickerView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
@@ -45,6 +46,90 @@ class ZoomableStickerView @JvmOverloads constructor(
     private var previousBitmap: Bitmap? = null
     private var crossfadeProgress = 1f
     private var crossfadeAnimator: ValueAnimator? = null
+
+    // ---------- Sticker động từ video AI ----------
+    // Các frame đã giải mã sẵn (AiVideoFrameExtractor). Chủ thể (SubjectLayer) được vẽ bằng frame hiện tại,
+    // còn chữ/decor vẫn là decorItems vẽ đè lên -> chọn / kéo / xoay / xoá / undo-redo hoạt động như cũ.
+    // (Bản cũ gán thẳng currentBitmap, nhưng nhánh project của onDraw bỏ qua currentBitmap nên video không bao giờ hiện.)
+    private var aiFrames: List<Bitmap>? = null
+    private var aiFrameIndex = 0
+    private var aiFrameDelayMs = 83
+    private var aiFrameAnimator: ValueAnimator? = null
+
+    fun hasAiAnimation(): Boolean = aiFrames != null
+
+    /** frames = null -> quay về ảnh tĩnh của chủ thể. */
+    fun setAiAnimation(frames: List<Bitmap>?, frameDelayMs: Int = 83) {
+        aiFrameAnimator?.cancel()
+        aiFrameAnimator = null
+        aiFrames = frames?.takeIf { it.isNotEmpty() }
+        aiFrameDelayMs = frameDelayMs.coerceAtLeast(16)
+        aiFrameIndex = 0
+
+        val firstFrame = aiFrames?.firstOrNull()
+        if (firstFrame != null) {
+            resetTransformToFitWidth(firstFrame.width.toFloat(), firstFrame.height.toFloat())
+        }
+
+        projectContent?.let { syncLayerItems(it) } // dựng lại khung chủ thể theo kích thước frame
+        startAiAnimator()
+        restartAnimationAnimatorIfNeeded()
+        invalidate()
+    }
+
+    /**
+     * Ép ma trận hiển thị phóng to/thu nhỏ sao cho chiều ngang của nội dung
+     * vừa khít với chiều ngang của View, chiều dọc tự động căn giữa.
+     */
+    fun resetTransformToFitWidth(contentWidth: Float, contentHeight: Float) {
+        if (width <= 0 || height <= 0 || contentWidth <= 0f || contentHeight <= 0f) return
+
+        // 1. Chỉ lấy tỷ lệ Scale theo chiều ngang
+        val scale = height.toFloat() / contentHeight
+
+        // 2. Tính toán dịch chuyển để căn giữa
+        val dx = (width - contentWidth * scale) / 2f // Theo chiều ngang sẽ = 0
+        val dy = (height - contentHeight * scale) / 2f // Căn giữa theo chiều dọc
+
+        displayMatrix.reset()
+        displayMatrix.postScale(scale, scale)
+        displayMatrix.postTranslate(dx, dy)
+
+        isMatrixInitialized = true
+        invalidate()
+    }
+
+    private fun startAiAnimator() {
+        val frames = aiFrames ?: return
+        aiFrameAnimator?.cancel()
+        if (frames.size < 2) return
+        aiFrameAnimator = ValueAnimator.ofInt(0, frames.size).apply {
+            duration = frames.size * aiFrameDelayMs.toLong()
+            repeatCount = ValueAnimator.INFINITE
+            interpolator = LinearInterpolator()
+            addUpdateListener {
+                aiFrameIndex = (it.animatedValue as Int).coerceAtMost(frames.size - 1)
+                invalidate()
+            }
+            start()
+        }
+    }
+
+    /** Frame cần vẽ cho 1 item: chủ thể dùng frame AI, còn lại dùng bitmap của chính nó. */
+    private fun currentBitmapFor(decor: DecorItemState, frameIdx: Int = aiFrameIndex): Bitmap {
+        if (decor.isSubject) {
+            val f = aiFrames?.getOrNull(frameIdx)
+            if (f != null && !f.isRecycled) return f
+        }
+        return decor.bitmap
+    }
+
+    /** Toàn bộ frame của sticker động (video AI + chữ/decor đè lên), đúng kích thước canvas project. */
+    fun renderAiFrames(): List<Bitmap>? {
+        val frames = aiFrames ?: return null
+        if (projectContent == null) return null
+        return frames.indices.mapNotNull { renderProjectBitmapAt(it) }
+    }
 
     // xử lý text
     var onTextLayerDoubleTapped: ((TextLayer) -> Unit)? = null
@@ -162,9 +247,9 @@ class ZoomableStickerView @JvmOverloads constructor(
         style = Paint.Style.FILL
     }
     private val actionPillDividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#E8E8E8")
+        color = Color.parseColor("#FFFFFF")
         style = Paint.Style.STROKE
-        strokeWidth = 1f * resources.displayMetrics.density
+        strokeWidth = 0f * resources.displayMetrics.density
     }
 
     // 4 corner handle paints
@@ -445,6 +530,9 @@ class ZoomableStickerView @JvmOverloads constructor(
                         ?: if (layer is SubjectLayer) loader.loadBitmap(layer.source) else null
                 }
                 if (bmp != null) {
+                    if (layerSourceKeys[layer.id] == PRELOADED_KEY && layerBitmaps[layer.id]?.isRecycled == false) {
+                        continue
+                    }
                     layerBitmaps[layer.id] = bmp
                     layerSourceKeys[layer.id] = key
                     // Chỉ sync nếu content hiện tại vẫn là content đã yêu cầu (tránh ghi đè state mới hơn)
@@ -458,7 +546,9 @@ class ZoomableStickerView @JvmOverloads constructor(
     }
 
     /** Vẽ toàn bộ layer của project ra bitmap đúng kích thước canvas (dùng để export / thumbnail). */
-    fun renderProjectBitmap(): Bitmap? {
+    fun renderProjectBitmap(): Bitmap? = renderProjectBitmapAt(aiFrameIndex)
+
+    private fun renderProjectBitmapAt(frameIdx: Int): Bitmap? {
         val content = projectContent ?: return null
         val w = content.canvas.width.takeIf { it > 0 } ?: 512
         val h = content.canvas.height.takeIf { it > 0 } ?: 512
@@ -474,7 +564,7 @@ class ZoomableStickerView @JvmOverloads constructor(
             c.rotate(decor.rotation)
             val dw = decor.width * decor.scale
             val dh = decor.height * decor.scale
-            c.drawBitmap(decor.bitmap, null, RectF(-dw / 2f, -dh / 2f, dw / 2f, dh / 2f), paint)
+            c.drawBitmap(currentBitmapFor(decor, frameIdx), null, RectF(-dw / 2f, -dh / 2f, dw / 2f, dh / 2f), paint)
             c.restore()
         }
         return bmp
@@ -556,7 +646,9 @@ class ZoomableStickerView @JvmOverloads constructor(
                 )
             } else if(layer is SubjectLayer){
                 // Chuyển SubjectLayer thành item có thể tương tác xoay/phóng
-                val bmp = layerBitmaps[layer.id]?.takeIf { !it.isRecycled } ?: continue
+                val staticBmp = layerBitmaps[layer.id]?.takeIf { !it.isRecycled } ?: continue
+                // Có sticker động -> khung chủ thể lấy kích thước theo frame video (9:16), không theo ảnh tĩnh
+                val bmp = aiFrames?.firstOrNull()?.takeIf { !it.isRecycled } ?: staticBmp
                 val cw = content.canvas.width.toFloat().takeIf { it > 0f } ?: 512f
                 val ch = content.canvas.height.toFloat().takeIf { it > 0f } ?: 512f
                 val base = min(cw / bmp.width, ch / bmp.height)
@@ -649,9 +741,17 @@ class ZoomableStickerView @JvmOverloads constructor(
     private var animationAnimator: ValueAnimator? = null
     private var animFrameIndex = 0
 
-    fun setAnimationType(type: com.jetpack.stickify.domain.model.StickerAnimationType) {
+    val effectiveAnimationType: StickerAnimationType
+        get() = if (hasAiAnimation()) StickerAnimationType.NONE else currentAnimationType
+
+    fun setAnimationType(type: StickerAnimationType) {
         currentAnimationType = type
+        restartAnimationAnimatorIfNeeded()
+    }
+
+    private fun restartAnimationAnimatorIfNeeded() {
         animationAnimator?.cancel()
+        val type = effectiveAnimationType
         if (type.isAnimated) {
             val duration = (type.totalFrames * type.frameDelayMs).toLong().coerceAtLeast(300L)
             animationAnimator = ValueAnimator.ofInt(0, type.totalFrames - 1).apply {
@@ -673,6 +773,7 @@ class ZoomableStickerView @JvmOverloads constructor(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         if (!viewScope.isActive) viewScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+        if (aiFrames != null) startAiAnimator()
     }
 
     override fun onDetachedFromWindow() {
@@ -680,6 +781,7 @@ class ZoomableStickerView @JvmOverloads constructor(
         crossfadeAnimator?.cancel()
         viewScope.cancel()
         animationAnimator?.cancel()
+        aiFrameAnimator?.cancel()
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -692,17 +794,15 @@ class ZoomableStickerView @JvmOverloads constructor(
         // 2. Nếu có projectContent (Multi-layer mode từ Room DB)
         val content = projectContent
         if (content != null) {
-            // Preview hiệu ứng: toàn bộ nội dung (chủ thể + decor + chữ) chuyển động quanh tâm canvas,
-            // đúng như ảnh GIF sẽ được xuất ra. Trước đây nhánh project bỏ qua bước này nên chọn effect
-            // không thấy gì thay đổi.
-            val hasAnim = currentAnimationType.isAnimated
+            val animType = effectiveAnimationType
+            val hasAnim = animType.isAnimated
             if (hasAnim) {
                 val cw = getBaseCanvasWidth()
                 val ch = getBaseCanvasHeight()
                 val pts = floatArrayOf(cw / 2f, ch / 2f)
                 displayMatrix.mapPoints(pts)
                 val tf = com.jetpack.stickify.data.gif.StickerAnimationRenderer
-                    .getFrameTransform(currentAnimationType, animFrameIndex)
+                    .getFrameTransform(animType, animFrameIndex)
                 val sc = currentMatrixScale()
                 // tf: [translateX (tỉ lệ theo w), translateY (tỉ lệ theo h), scaleX, scaleY, rotation]
                 canvas.save()
@@ -738,14 +838,15 @@ class ZoomableStickerView @JvmOverloads constructor(
             }
             val prev = previousBitmap
 
-            val hasAnim = currentAnimationType.isAnimated
+            val animType = effectiveAnimationType
+            val hasAnim = animType.isAnimated
             if (hasAnim) {
                 canvas.save()
                 val pts = floatArrayOf(curr.width / 2f, curr.height / 2f)
                 displayMatrix.mapPoints(pts)
                 val cx = pts[0]
                 val cy = pts[1]
-                val tf = com.jetpack.stickify.data.gif.StickerAnimationRenderer.getFrameTransform(currentAnimationType, animFrameIndex)
+                val tf = StickerAnimationRenderer.getFrameTransform(animType, animFrameIndex)
                 val currentScale = currentMatrixScale()
                 // tf: [translateX (ratio of w), translateY (ratio of h), scaleX, scaleY, rotation]
                 canvas.translate(cx + tf[0] * curr.width * currentScale, cy + tf[1] * curr.height * currentScale)
@@ -819,7 +920,7 @@ class ZoomableStickerView @JvmOverloads constructor(
             canvas.translate(pts[0], pts[1])
             canvas.rotate(decor.rotation)
             val rect = RectF(-screenW / 2f, -screenH / 2f, screenW / 2f, screenH / 2f)
-            canvas.drawBitmap(decor.bitmap, null, rect, decorPaint)
+            canvas.drawBitmap(currentBitmapFor(decor), null, rect, decorPaint)
             canvas.restore()
         }
         if (drawOverlay) drawSelectionOverlay(canvas)
@@ -981,10 +1082,14 @@ class ZoomableStickerView @JvmOverloads constructor(
 
     private fun buildActionPillLayout(corners: Array<FloatArray>, density: Float): ActionPillLayout {
         val topRight = corners[1]
-        val buttonSize = 28f * density
+        val buttonSize = 26f * density
         val horizontalPadding = 12f * density
         val verticalPadding = 8f * density
-        val pillWidth = horizontalPadding * 2f + buttonSize * 2f
+
+        // 1. THÊM KHOẢNG CÁCH GIỮA 2 ICON
+        val iconSpacing = 6f * density
+
+        val pillWidth = horizontalPadding * 2f + buttonSize * 2f + iconSpacing
         val pillHeight = verticalPadding * 2f + buttonSize
         val spacingTop = 14f * density
 
@@ -999,9 +1104,9 @@ class ZoomableStickerView @JvmOverloads constructor(
             pillRect.top + verticalPadding + buttonSize
         )
         val deleteRect = RectF(
-            duplicateRect.right,
+            duplicateRect.right + iconSpacing,
             duplicateRect.top,
-            duplicateRect.right + buttonSize,
+            duplicateRect.right + iconSpacing+ buttonSize,
             duplicateRect.bottom
         )
 
@@ -1180,9 +1285,6 @@ class ZoomableStickerView @JvmOverloads constructor(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-
-
-
 
                 if (drawDecorBrush != null && hasContent()) {
                     preGestureSnapshot = takeSnapshot()

@@ -10,7 +10,7 @@ import java.nio.ByteOrder
 
 object AnimatedWebPEncoder {
 
-    fun encode(frames: List<Bitmap>, delayMs: Int, outFile: File) {
+    fun encode(frames: List<Bitmap>, delayMs: Int, outFile: File, lossless: Boolean = true, quality: Int = 100) {
         if (frames.isEmpty()) return
 
         val width = frames[0].width
@@ -20,12 +20,12 @@ object AnimatedWebPEncoder {
         for (frame in frames) {
             val baos = ByteArrayOutputStream()
             val format = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                Bitmap.CompressFormat.WEBP_LOSSLESS
+                if (lossless) Bitmap.CompressFormat.WEBP_LOSSLESS else Bitmap.CompressFormat.WEBP_LOSSY
             } else {
                 @Suppress("DEPRECATION")
                 Bitmap.CompressFormat.WEBP
             }
-            frame.compress(format, 100, baos)
+            frame.compress(format, quality, baos)
             val webpBytes = baos.toByteArray()
 
             // FIX LỖI 2: Quét qua file WebP tĩnh để bóc tách chính xác Chunk ảnh (ALPH, VP8, VP8L)

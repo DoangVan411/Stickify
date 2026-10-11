@@ -28,10 +28,18 @@ import com.jetpack.stickify.presentation.ui.edit_sticker.suggestion.SuggestionFr
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextToolFragment
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.util.Base64
+import java.io.File
+import java.io.FileOutputStream
 import android.graphics.Typeface
+import android.util.Log
 import android.view.Gravity
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.OnBackPressedCallback
+import com.jetpack.stickify.domain.model.AiAnimation
+import com.jetpack.stickify.presentation.ui.edit_sticker.prompt_sticker.AiStickerEvent
+import com.jetpack.stickify.presentation.ui.edit_sticker.prompt_sticker.AiStickerUiState
+import com.jetpack.stickify.presentation.ui.edit_sticker.prompt_sticker.AiStickerViewModel
 import com.jetpack.stickify.domain.model.BorderStyle
 import com.jetpack.stickify.domain.model.StickerAnimationType
 import com.jetpack.stickify.domain.model.SubjectLayer
@@ -40,11 +48,16 @@ import com.jetpack.stickify.domain.model.TextLayer
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextInputOverlayController
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextStyleSpec
 import com.jetpack.stickify.presentation.ui.edit_sticker.cancel.SaveConfirmDialogFragment
+import com.jetpack.stickify.presentation.ui.edit_sticker.prompt_sticker.AiHistoryResult
+import com.jetpack.stickify.presentation.ui.edit_sticker.prompt_sticker.EditSpan
 import com.jetpack.stickify.presentation.ui.edit_sticker.utils.PromptKeyboardAdjuster
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
+import com.jetpack.stickify.presentation.ui.edit_sticker.utils.PromptUtils
 /**
  * Màn hình "Chỉnh sửa" sticker:
  * - Nhận ảnh đã cắt qua EXTRA_CROPPED_IMAGE_URI (từ CutoutActivity).
@@ -85,9 +98,9 @@ class StickerEditActivity : AppCompatActivity() {
     // Thêm cờ này để chặn onStop lưu thumbnail nếu chọn "Không lưu"
     private var isDiscardingChanges = false
 
-    // true = mở project có sẵn từ DB (render bằng layer). false = luồng mới từ CutoutActivity (render bằng bitmap style).
-    // KHÔNG dùng `currentProjectId != null` để phân biệt vì id luôn được gán ở cả 2 luồng.
-    private var isProjectMode = false
+    var isProjectMode = false
+
+    fun hasAiAnimation(): Boolean = aiViewModel.uiState.value.animation != null || binding.zoomableView.hasAiAnimation()
 
     // Chỉ finish() khi CẢ export ảnh/GIF lẫn lưu project đã xong
     private var pendingExport = false
@@ -100,9 +113,16 @@ class StickerEditActivity : AppCompatActivity() {
 
     // true khi AI đang tạo sticker (hiện viền chạy + lớp phủ tối)
     private var isAiGenerating = false
+    private var pendingReveal = false
 
     // Viền xanh-cam: gắn làm foreground của promptCard nên luôn bám sát card
     private lateinit var aiGlow: AiGlowBorderDrawable
+
+    private val aiViewModel: AiStickerViewModel by viewModels()
+    private var shownAnimation: AiAnimation? = null
+    private var lastAiState = AiStickerUiState()
+    private var editCanUndo = false
+    private var editCanRedo = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -113,6 +133,7 @@ class StickerEditActivity : AppCompatActivity() {
         binding.aiGlowHalo.target = binding.promptCard  // quầng sóng nhòe ra ngoài card
 
         setupClickListeners()
+        observeAiState()
         setupKeyboard()
         setupObservers()
         setupTextOverlayLogic() // phải khởi tạo trước tab menu (tab "Chữ" dùng textController)
@@ -126,7 +147,14 @@ class StickerEditActivity : AppCompatActivity() {
             isProjectMode = true
             isNewProject = false
             currentProjectId = projectId
-            editViewModel.loadProject(projectId)
+            editViewModel.loadProject(this, projectId) { subjectLayer, border, playback, restoredAi ->
+                if (subjectLayer != null) {
+                    sharedViewModel.restoreFromProject(this, projectId, subjectLayer, border, playback)
+                }
+                if (restoredAi.isNotEmpty()) {
+                    aiViewModel.restore(restoredAi, editViewModel.undoDepth)
+                }
+            }
             return
         }
 
@@ -149,6 +177,78 @@ class StickerEditActivity : AppCompatActivity() {
         }
     }
 
+    // ---------- AI sticker: Activity chỉ quan sát state, mọi xử lý nằm ở AiStickerViewModel ----------
+    private fun observeAiState() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { aiViewModel.uiState.collect { renderAiState(it) } }
+                launch { aiViewModel.events.collect { handleAiEvent(it) } }
+            }
+        }
+    }
+
+    private fun renderAiState(state: AiStickerUiState) {
+        lastAiState = state
+        setAiLoading(state.isGenerating, state.percent, state.message)
+
+        if (pendingReveal && !state.isGenerating) {
+            pendingReveal = false
+            if (state.error == null && state.animation != null) {
+                binding.aiRevealSweep.play(startDelayMs = 220L) { Log.d("AiReveal", "sweep end") }
+            } else {
+                binding.aiRevealSweep.discardSnapshot()
+            }
+        }
+        val isNewResult = state.animation !== shownAnimation
+
+
+        if (isNewResult) {
+            shownAnimation = state.animation
+
+            // CHỈ CẦN THIẾT LẬP LẠI KHUNG HÌNH AI CHO VIEW NHƯ CŨ
+            val firstFrame = state.animation?.frames?.firstOrNull()
+            if (firstFrame != null) {
+                binding.zoomableView.resetTransformToFitWidth(firstFrame.width.toFloat(), firstFrame.height.toFloat())
+            }
+
+            binding.zoomableView.setAiAnimation(state.animation?.frames, state.animation?.frameDelayMs ?: 83)
+        }
+        //xử lý lỗi
+        state.error?.let { errorMessage ->
+            PromptUtils.showErrorDialog(
+                supportFragmentManager,
+                "Lỗi tạo Sticker",
+                errorMessage
+            )
+            aiViewModel.consumeError()
+        }
+        refreshUndoRedo()
+    }
+
+    private fun handleAiEvent(event: AiStickerEvent) {
+        when (event) {
+            is AiStickerEvent.Exported -> {
+                exportResultUri = Uri.parse(event.uri)
+                pendingExport = false
+                finishWhenSaveDone()
+            }
+            is AiStickerEvent.ExportFailed -> {
+                Toast.makeText(this, "Xuất sticker động thất bại: ${event.message}", Toast.LENGTH_LONG).show()
+                pendingExport = false
+                finishWhenSaveDone()
+            }
+        }
+    }
+
+    /** Undo/Redo = lịch sử layer (editViewModel) + kết quả AI. */
+    private fun refreshUndoRedo() {
+        val depth = editViewModel.undoDepth
+        updateUndoRedoButtons(
+            canUndo = editCanUndo || lastAiState.canUndoAi,
+            canRedo = editCanRedo || aiViewModel.canRedoAi(depth)
+        )
+    }
+
     private fun setupKeyboard() {
         // Khởi tạo và kích hoạt bộ điều chỉnh bàn phím
         keyboardAdjuster = PromptKeyboardAdjuster(
@@ -164,6 +264,7 @@ class StickerEditActivity : AppCompatActivity() {
     override fun onDestroy() {
         if (::aiGlow.isInitialized) aiGlow.release()
         binding.aiGlowHalo.release()
+        binding.aiRevealSweep.release()
         super.onDestroy()
     }
 
@@ -188,7 +289,7 @@ class StickerEditActivity : AppCompatActivity() {
         val uri = exportResultUri
         if (uri != null) {
             val anim = sharedViewModel.currentAnimation.value
-            val isAnimated = anim != null && anim.isAnimated
+            val isAnimated = (anim != null && anim.isAnimated) || aiViewModel.uiState.value.animation != null
 
             val intent = Intent(this, StickerPreviewActivity::class.java).apply {
                 putExtra(StickerPreviewActivity.EXTRA_STICKER_URI, uri)
@@ -209,7 +310,15 @@ class StickerEditActivity : AppCompatActivity() {
     private var editLoading = false
 
     private fun refreshProgress() {
-        binding.progressBar.visibility = if (sharedLoading || editLoading) View.VISIBLE else View.GONE
+        val isLoading = sharedLoading || editLoading || pendingProject || pendingExport
+        binding.progressBar.visibility = if (isLoading) View.VISIBLE else View.GONE
+
+        val message = when {
+            editLoading -> "Đang tải dự án..."
+            pendingProject || pendingExport -> "Đang lưu sticker..."
+            else -> "Đang xử lý..."
+        }
+        binding.tvLoadingMessage.text = message
     }
 
     /** Đẩy bitmap của style đang chọn (gốc/viền/cartoon) vào layer chủ thể. */
@@ -226,6 +335,12 @@ class StickerEditActivity : AppCompatActivity() {
         sharedViewModel.isLoading.observe(this) { isLoading ->
             sharedLoading = isLoading == true
             refreshProgress()
+        }
+
+        sharedViewModel.imagesReady.observe(this) { isReady ->
+            if (isReady == true && isProjectMode) {
+                applySubjectStyleBitmap()
+            }
         }
 
         sharedViewModel.currentStyle.observe(this) { style ->
@@ -306,7 +421,17 @@ class StickerEditActivity : AppCompatActivity() {
                     if (isProjectMode) {
                         editLoading = state.isLoading
                         refreshProgress()
-                        updateUndoRedoButtons(state.canUndo, state.canRedo)
+                        editCanUndo = state.canUndo
+                        editCanRedo = state.canRedo
+                        aiViewModel.onEditDepthChanged(editViewModel.undoDepth)
+                        refreshUndoRedo()
+
+                        val contentAnim = state.editorSession.content.playback?.animationType ?: StickerAnimationType.NONE
+                        if (sharedViewModel.currentAnimation.value != contentAnim) {
+                            sharedViewModel.setAnimation(contentAnim)
+                        }
+                        binding.zoomableView.setAnimationType(contentAnim)
+
                         // BƯỚC BỊ THIẾU trước đây: đẩy nội dung project (các layer) vào view để vẽ.
                         if (!state.isLoading) {
                             binding.zoomableView.setProjectContent(
@@ -353,7 +478,11 @@ class StickerEditActivity : AppCompatActivity() {
 
         binding.btnUndo.setOnClickListener {
             if (isProjectMode) {
-                editViewModel.undo()
+                if (isAiGenerating) return@setOnClickListener
+                when (aiViewModel.undo(editViewModel.undoDepth)) {
+                    AiHistoryResult.HANDLED -> Unit
+                    else -> editViewModel.undo()   // NOT_HANDLED hoặc HANDLED_AND_STEP_EDIT
+                }
             } else {
                 if (binding.zoomableView.undoLastDrawDecorStroke()) {
                     return@setOnClickListener
@@ -364,7 +493,14 @@ class StickerEditActivity : AppCompatActivity() {
 
         binding.btnRedo.setOnClickListener {
             if (isProjectMode) {
-                editViewModel.redo()
+                if (isAiGenerating) return@setOnClickListener
+                when (aiViewModel.redo(editViewModel.undoDepth)) {
+                    AiHistoryResult.HANDLED -> Unit
+                    else -> if (editCanRedo) {
+                        aiViewModel.expectEditRedo()
+                        editViewModel.redo()
+                    }
+                }
             } else {
                 sharedViewModel.moveHistory(1)
             }
@@ -377,10 +513,19 @@ class StickerEditActivity : AppCompatActivity() {
 
         binding.btnSendPrompt.setOnClickListener {
             val prompt = binding.etPrompt.text?.toString()?.trim().orEmpty()
-            if (prompt.isEmpty()) {
-                Toast.makeText(this, "Hãy nhập mô tả cho sticker", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
+
+            // 1. Kiểm tra tính hợp lệ bằng Utils
+            when (val validation = PromptUtils.validatePrompt(prompt)) {
+                is PromptUtils.ValidationResult.Invalid -> {
+                    // Nếu không hợp lệ, hiển thị Dialog
+                    PromptUtils.showErrorDialog(supportFragmentManager, validation.title, validation.message)
+                    return@setOnClickListener
+                }
+                is PromptUtils.ValidationResult.Valid -> {
+                    // Hợp lệ thì đi tiếp
+                }
             }
+
             if (isAiGenerating) return@setOnClickListener
             startAiGeneration(prompt)
         }
@@ -391,17 +536,53 @@ class StickerEditActivity : AppCompatActivity() {
      * phần còn lại của màn hình tối đi kèm Lottie loading.
      */
     private fun startAiGeneration(prompt: String) {
-        setAiLoading(true)
+        // Phải chụp ảnh trên Main thread (view đọc state decorItems); bản cũ chụp trong Dispatchers.IO
+        val source = captureCurrentBitmap()
+        if (source == null) {
+            Toast.makeText(this, "Không thể lấy ảnh hiện tại", Toast.LENGTH_SHORT).show()
+            return
+        }
 
-        // TODO: gọi backend tạo sticker bằng `prompt` ở đây, xong thì gọi setAiLoading(false).
-        // Đoạn delay dưới đây chỉ để xem demo hiệu ứng -> xoá khi nối backend.
-        lifecycleScope.launch {
-            delay(4000)
-            setAiLoading(false)
+        binding.aiRevealSweep.captureSnapshot(binding.zoomableView)
+        pendingReveal = true
+        Log.d("AiReveal", "snapshot captured")
+
+        val editVm = editViewModel   // chỉ capture ViewModel, không capture Activity (job sống qua xoay màn hình)
+        aiViewModel.generate(source, prompt) {
+            val before = editVm.undoDepth
+            editVm.clearAllDecorAndTextWithUndo()
+            EditSpan(before, editVm.undoDepth)
         }
     }
 
-    private fun setAiLoading(loading: Boolean) {
+    private fun setAiLoading(loading: Boolean, percent: Int = 0, message: String = "") {
+        val displayMsg = if (message.isNotBlank()) "$message..." else "Đang tạo sticker AI..."
+
+        // Nếu đang trong trạng thái loading và tiếp tục nhận progress update
+        if (loading && isAiGenerating) {
+            if (binding.tvAiLoadingProgress.text.toString() != displayMsg) {
+                // Hủy animation cũ nếu có để tránh xung đột khi percent về quá nhanh
+                binding.tvAiLoadingProgress.animate().cancel()
+
+                // 1. Trượt text cũ lên trên và mờ dần (tốn một nửa thời gian)
+                binding.tvAiLoadingProgress.animate()
+                    .translationY(-40f)
+                    .alpha(0f)
+                    .setDuration(100)
+                    .withEndAction {
+                        // 2. Cập nhật text mới, dời View xuống dưới và trượt lên vị trí gốc
+                        binding.tvAiLoadingProgress.text = displayMsg
+                        binding.tvAiLoadingProgress.translationY = 40f
+                        binding.tvAiLoadingProgress.animate()
+                            .translationY(0f)
+                            .alpha(1f)
+                            .setDuration(250)
+                            .start()
+                    }.start()
+            }
+            return
+        }
+
         if (isAiGenerating == loading) return
         isAiGenerating = loading
 
@@ -416,15 +597,27 @@ class StickerEditActivity : AppCompatActivity() {
                 visibility = View.VISIBLE
                 animate().alpha(1f).setDuration(250).start()
             }
+            binding.progressLayout.apply {
+                alpha = 0f
+                visibility = View.VISIBLE
+                animate().alpha(1f).setDuration(250).start()
+            }
             binding.aiLoadingLottie.playAnimation()
             aiGlow.start()
             binding.aiGlowHalo.start()
+
+            binding.tvAiLoadingProgress.text = displayMsg
         } else {
             aiGlow.stop()
             binding.aiGlowHalo.stop()
             binding.aiLoadingOverlay.animate().alpha(0f).setDuration(200).withEndAction {
                 if (!isAiGenerating) {
                     binding.aiLoadingOverlay.visibility = View.GONE
+                }
+            }.start()
+            binding.progressLayout.animate().alpha(0f).setDuration(200).withEndAction {
+                if (!isAiGenerating) {
+                    binding.progressLayout.visibility = View.GONE
                     binding.aiLoadingLottie.cancelAnimation()
                 }
             }.start()
@@ -571,7 +764,7 @@ class StickerEditActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (isAiGenerating) {
-                    setAiLoading(false) // Back khi đang tạo AI = huỷ
+                    aiViewModel.cancel() // Back khi đang tạo AI = huỷ job + ngắt socket
                 } else if (::textController.isInitialized && textController.isShowing) {
                     textController.commit()
                 } else {
@@ -621,8 +814,7 @@ class StickerEditActivity : AppCompatActivity() {
         val styledBitmap: Bitmap?
         val exportBitmap: Bitmap?
         if (isProjectMode) {
-            // Chỉ lấy styledBitmap nếu là project mới (để lưu viền/cartoon vào layer ảnh gốc)
-            styledBitmap = if (isNewProject) sharedViewModel.styleBitmaps[sharedViewModel.currentStyle.value ?: StickerStyle.ORIGINAL] else null
+            styledBitmap = sharedViewModel.styleBitmaps[sharedViewModel.currentStyle.value ?: StickerStyle.ORIGINAL]
             exportBitmap = view.renderProjectBitmap()
         } else {
             val base = sharedViewModel.styleBitmaps[sharedViewModel.currentStyle.value ?: StickerStyle.ORIGINAL]
@@ -634,26 +826,45 @@ class StickerEditActivity : AppCompatActivity() {
         pendingProject = true
         pendingExport = false
         exportResultUri = null
-        if (exportBitmap != null) {
+        val aiFrames = if (isProjectMode) view.renderAiFrames() else null
+        if (aiFrames != null) {
+            // Sticker động từ AI: ghép từng frame video + chữ/decor rồi xuất WebP động
+            pendingExport = true
+            aiViewModel.exportAnimated(aiFrames, aiViewModel.frameDelayMs)
+        } else if (exportBitmap != null) {
             pendingExport = true
             sharedViewModel.saveCurrentSticker(exportBitmap, currentProjectId)
         }
 
-        // Nếu là mở project cũ, không ghi đè viền bằng giá trị mặc định của thanh công cụ
+        val currentStyle = sharedViewModel.currentStyle.value ?: StickerStyle.ORIGINAL
         val anim = sharedViewModel.currentAnimation.value ?: StickerAnimationType.NONE
-        val border = if (!isNewProject) null else BorderStyle(
-            thickness = sharedViewModel.currentBorderThickness.value?.toFloat() ?: 30f,
-            spacing = sharedViewModel.currentBorderDistance.value?.toFloat() ?: 20f,
-            colorArgb = sharedViewModel.currentBorderColor.value ?: Color.WHITE
-        )
+
+        val border = if (sharedViewModel.imagesReady.value == true) {
+            BorderStyle(
+                thickness = sharedViewModel.currentBorderThickness.value?.toFloat() ?: 30f,
+                spacing = sharedViewModel.currentBorderDistance.value?.toFloat() ?: 20f,
+                colorArgb = sharedViewModel.currentBorderColor.value ?: Color.WHITE
+            )
+        } else null
+
+        val originalCore = sharedViewModel.coreBitmaps[StickerStyle.ORIGINAL]
+        val cartoonCore = sharedViewModel.coreBitmaps[StickerStyle.CARTOON]
+
+        val appliedEntries = aiViewModel.getAppliedEntries()
+        val hasUndoneAi = aiViewModel.getUndoneEntriesCount() > 0
 
         editViewModel.saveProjectWithDetails(
             context = this,
             projectId = projectId,
             border = border,
-            animationType = if (!isNewProject && anim == StickerAnimationType.NONE) null else anim,
+            animationType = anim,
+            selectedStyle = currentStyle,
+            originalCoreBitmap = originalCore,
+            cartoonCoreBitmap = cartoonCore,
             styledBitmap = styledBitmap,
-            thumbnailBitmap = captureCurrentBitmap()
+            thumbnailBitmap = captureCurrentBitmap(),
+            aiEntries = appliedEntries,
+            hasUndoneAi = hasUndoneAi
         )
     }
 

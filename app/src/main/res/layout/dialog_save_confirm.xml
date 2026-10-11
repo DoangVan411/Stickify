@@ -22,6 +22,7 @@
             <FrameLayout
                 android:layout_width="64dp"
                 android:layout_height="64dp"
+                android:background="@drawable/bg_circle_badge_blue"
                 android:layout_gravity="center">
 
                 <ImageView
@@ -29,7 +30,7 @@
                     android:layout_width="32dp"
                     android:layout_height="32dp"
                     android:layout_gravity="center"
-                    android:src="@android:drawable/ic_menu_save"
+                    android:src="@drawable/ic_save"
                     app:tint="@color/primary_300" />
             </FrameLayout>
 

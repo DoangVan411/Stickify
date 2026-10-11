@@ -9,5 +9,6 @@ enum class PlaybackSpeed(val multiplier: Int) {
 
 data class Playback(
     val speed: PlaybackSpeed = PlaybackSpeed.X1,
-    val loop: Boolean = true
+    val loop: Boolean = true,
+    val animationType: StickerAnimationType = StickerAnimationType.NONE
 )

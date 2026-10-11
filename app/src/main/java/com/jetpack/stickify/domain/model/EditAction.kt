@@ -46,3 +46,10 @@ data class ChangeSpeedAction(
 ) : EditAction {
     override fun inverse(): EditAction = ChangeSpeedAction(before = after, after = before)
 }
+
+data class ChangeEffectAction(
+    val before: StickerAnimationType,
+    val after: StickerAnimationType
+) : EditAction {
+    override fun inverse(): EditAction = ChangeEffectAction(before = after, after = before)
+}

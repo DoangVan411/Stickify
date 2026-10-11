@@ -4,13 +4,20 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.jetpack.stickify.R
 import com.jetpack.stickify.domain.model.StickerAnimationType
+import com.jetpack.stickify.presentation.ui.edit_sticker.StickerEditActivity
+import com.jetpack.stickify.presentation.ui.edit_sticker.StickerEditViewModel
 import com.jetpack.stickify.presentation.ui.edit_sticker.StickerSharedViewModel
+import kotlinx.coroutines.launch
 
 /**
  * Fragment hiển thị bảng chọn hiệu ứng animation cho sticker.
@@ -21,6 +28,7 @@ import com.jetpack.stickify.presentation.ui.edit_sticker.StickerSharedViewModel
  */
 class EffectToolFragment : Fragment() {
 
+    private val editViewModel: StickerEditViewModel by activityViewModels()
     private val sharedViewModel: StickerSharedViewModel by activityViewModels()
 
     override fun onCreateView(
@@ -69,11 +77,31 @@ class EffectToolFragment : Fragment() {
             )
         )
 
-        val adapter = EffectAdapter(effectItems) { animationType ->
-            sharedViewModel.setAnimation(animationType)
+        val initialType = sharedViewModel.currentAnimation.value ?: StickerAnimationType.NONE
+
+        val adapter = EffectAdapter(effectItems, initialType) { animationType ->
+            val act = activity as? StickerEditActivity
+            if (act?.isProjectMode == true) {
+                if (act.hasAiAnimation()) {
+                    Toast.makeText(context, "Sticker AI không áp dụng hiệu ứng chuyển động", Toast.LENGTH_SHORT).show()
+                } else {
+                    editViewModel.setEffect(animationType)
+                }
+            } else {
+                sharedViewModel.setAnimation(animationType)
+            }
         }
 
         rvEffects.layoutManager = GridLayoutManager(requireContext(), 3)
         rvEffects.adapter = adapter
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                editViewModel.uiState.collect { state ->
+                    val animType = state.editorSession.content.playback?.animationType ?: StickerAnimationType.NONE
+                    adapter.setSelectedType(animType)
+                }
+            }
+        }
     }
 }

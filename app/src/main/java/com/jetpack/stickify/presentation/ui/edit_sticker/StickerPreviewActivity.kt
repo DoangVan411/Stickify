@@ -8,13 +8,13 @@ import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
-import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import com.bumptech.glide.Glide
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
 import com.jetpack.stickify.R
 import com.jetpack.stickify.presentation.ui.collection.favourite.SelectPacksDialogFragment
 import com.jetpack.stickify.presentation.ui.home.HomeActivity
@@ -26,11 +26,11 @@ class StickerPreviewActivity : AppCompatActivity() {
     private val viewModel: StickerPreviewViewModel by viewModels()
 
     private lateinit var ivPreviewSticker: ImageView
-    private lateinit var cardFavorite: LinearLayout
+    private lateinit var cardFavorite: MaterialCardView
     private lateinit var ivFavoriteIcon: ImageView
     private lateinit var tvFavoriteLabel: TextView
-    private lateinit var cardAddToKeyboard: LinearLayout
-    private lateinit var cardAddToPack: LinearLayout
+    private lateinit var cardAddToKeyboard: MaterialCardView
+    private lateinit var cardAddToPack: MaterialCardView
     private lateinit var btnDone: MaterialButton
 
     private var stickerUri: Uri? = null
@@ -174,17 +174,22 @@ class StickerPreviewActivity : AppCompatActivity() {
         }
         container.addView(animView)
 
-        val targetScaleX = if (startW > 0) targetW.toFloat() / startW else 0.35f
-        val targetScaleY = if (startH > 0) targetH.toFloat() / startH else 0.35f
+        val scale = targetW.toFloat() / startW
 
-        val adjustedEndX = endX + (targetW - startW) / 2f
-        val adjustedEndY = endY + (targetH - startH) / 2f
+        val targetCenterX = endX + targetW / 2f
+        val targetCenterY = endY + targetH / 2f
+
+        val startCenterX = startX + startW / 2f
+        val startCenterY = startY + startH / 2f
+
+        val translationX = targetCenterX - startCenterX
+        val translationY = targetCenterY - startCenterY
 
         animView.animate()
-            .x(adjustedEndX)
-            .y(adjustedEndY)
-            .scaleX(targetScaleX)
-            .scaleY(targetScaleY)
+            .translationX(translationX)
+            .translationY(translationY)
+            .scaleX(scale)
+            .scaleY(scale)
             .alpha(1.0f)
             .setDuration(1400)
             .setInterpolator(AccelerateDecelerateInterpolator())

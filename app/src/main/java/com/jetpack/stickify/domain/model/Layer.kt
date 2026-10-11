@@ -13,6 +13,7 @@ data class SubjectLayer(
     val source: AssetRef,
     val mediaKind: MediaKind = MediaKind.IMAGE,
     val cutoutPath: String = "",
+    val cartoonCorePath: String = "",
     val style: SubjectStyle = SubjectStyle.ORIGINAL,
     val styledPath: String = "",
     val strokeColorArgb: Int = 0,

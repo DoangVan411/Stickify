@@ -16,16 +16,27 @@ import com.jetpack.stickify.domain.model.StickerAnimationType
  */
 class EffectAdapter(
     private val items: List<EffectItem>,
+    initialSelectedType: StickerAnimationType = StickerAnimationType.NONE,
     private val onEffectSelected: (StickerAnimationType) -> Unit
 ) : RecyclerView.Adapter<EffectAdapter.EffectViewHolder>() {
 
-    private var selectedPosition = 0 // Mặc định chọn "Không"
+    private var selectedPosition = items.indexOfFirst { it.type == initialSelectedType }.coerceAtLeast(0)
 
     data class EffectItem(
         val type: StickerAnimationType,
         val iconResId: Int,
         val name: String
     )
+
+    fun setSelectedType(type: StickerAnimationType) {
+        val newPos = items.indexOfFirst { it.type == type }.coerceAtLeast(0)
+        if (selectedPosition != newPos) {
+            val prev = selectedPosition
+            selectedPosition = newPos
+            notifyItemChanged(prev)
+            notifyItemChanged(selectedPosition)
+        }
+    }
 
     inner class EffectViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         val ivIcon: ImageView = itemView.findViewById(R.id.ivEffectIcon)

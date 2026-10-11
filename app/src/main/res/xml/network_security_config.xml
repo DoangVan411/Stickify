@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Thêm localhost -->
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain> <!-- IP mặc định của máy ảo Android Studio -->
+        <!-- Thêm IP LAN của máy tính bạn nếu test trên máy thật (vd: 192.168.1.100) -->
+         <domain includeSubdomains="true">192.168.1.35</domain>
+    </domain-config>
+</network-security-config>

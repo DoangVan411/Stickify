@@ -4,7 +4,8 @@ data class ProjectContent(
     val canvas: CanvasSpec = CanvasSpec(),
     val layers: List<Layer> = emptyList(),
     val border: BorderStyle? = null,
-    val playback: Playback? = null
+    val playback: Playback? = null,
+    val aiAnimations: List<AiAnimationSpec> = emptyList()
 ) {
     fun apply(action: EditAction): ProjectContent {
         return when (action) {
@@ -38,6 +39,13 @@ data class ProjectContent(
             is ChangeSpeedAction -> {
                 val currentPlayback = playback ?: Playback()
                 copy(playback = currentPlayback.copy(speed = action.after))
+            }
+            is ChangeEffectAction -> {
+                val currentPlayback = playback ?: Playback()
+                copy(playback = currentPlayback.copy(
+                    animationType = action.after,
+                    speed = action.after.toPlaybackSpeed()
+                ))
             }
         }
     }

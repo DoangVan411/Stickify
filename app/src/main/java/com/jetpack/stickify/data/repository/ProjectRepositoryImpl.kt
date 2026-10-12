@@ -10,8 +10,10 @@ import com.jetpack.stickify.data.source.local.DatabaseSeeder
 import com.jetpack.stickify.data.source.local.FakeProjectDataSource
 import com.jetpack.stickify.data.source.local.dao.ProjectDao
 import com.jetpack.stickify.data.source.local.dao.StickerPackDao
+import com.jetpack.stickify.data.source.local.dao.TemplateDao
 import com.jetpack.stickify.domain.model.ExploreCategory
 import com.jetpack.stickify.domain.model.ProjectEntity
+import com.jetpack.stickify.domain.model.ProjectType
 import com.jetpack.stickify.domain.model.StickerPack
 import com.jetpack.stickify.domain.model.StickerPackEntity
 import com.jetpack.stickify.domain.model.StickerProject
@@ -29,15 +31,15 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Implementation của ProjectRepository kết hợp Room Database, Storage, Seeder và Fake DataSource cho Templates.
+ * Implementation của ProjectRepository kết hợp Room Database, Storage, Seeder cho Templates và Projects.
  */
 @Singleton
 class ProjectRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val projectDao: ProjectDao,
+    private val templateDao: TemplateDao,
     private val mapper: ProjectMapper,
     private val stickerPackDao: StickerPackDao,
-    private val fakeDataSource: FakeProjectDataSource,
     private val databaseSeeder: DatabaseSeeder
 ) : ProjectRepository {
     private val gson = Gson()
@@ -107,9 +109,29 @@ class ProjectRepositoryImpl @Inject constructor(
         return projectDao.getAllProjects()
     }
 
-    override suspend fun getExploreTemplates(category: ExploreCategory): Result<List<StickerTemplate>> {
-        return try {
-            Result.success(fakeDataSource.getExploreTemplatesByCategory(category))
+    override suspend fun getExploreTemplates(category: ExploreCategory): Result<List<StickerTemplate>> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            databaseSeeder.seedDatabaseIfEmpty()
+            val entities = templateDao.getAllTemplates()
+            val domainTemplates = entities.map { it.toDomain() }
+            val filtered = when (category) {
+                ExploreCategory.ALL -> domainTemplates
+                ExploreCategory.GIFS -> domainTemplates.filter { it.type == ProjectType.GIF || it.isAnimated }
+                ExploreCategory.STICKERS -> domainTemplates.filter { it.type == ProjectType.STICKER && !it.isAnimated }
+                ExploreCategory.CUTE -> domainTemplates.filter { it.tags.contains("cute") }
+                ExploreCategory.MEME -> domainTemplates.filter { it.tags.contains("meme") }
+            }
+            Result.success(filtered)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getTemplateById(templateId: String): Result<StickerTemplate?> = withContext(Dispatchers.IO) {
+        return@withContext try {
+            databaseSeeder.seedDatabaseIfEmpty()
+            val entity = templateDao.getTemplateById(templateId)
+            Result.success(entity?.toDomain())
         } catch (e: Exception) {
             Result.failure(e)
         }

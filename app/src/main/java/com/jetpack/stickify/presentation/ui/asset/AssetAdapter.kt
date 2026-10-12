@@ -67,15 +67,6 @@ class AssetAdapter(
             val resId = when (asset.path) {
                 "bg_transparent" -> R.drawable.ic_placeholder_explore_1
                 "bg_gradient_pastel" -> R.drawable.img_background
-                "bg_holographic" -> R.drawable.img_decor_6
-                "img_decor_1" -> R.drawable.img_decor_1
-                "img_decor_2" -> R.drawable.img_decor_2
-                "img_decor_3" -> R.drawable.img_decor_3
-                "img_decor_4" -> R.drawable.img_decor_4
-                "img_decor_5" -> R.drawable.img_decor_5
-                "img_sticker_01" -> R.drawable.img_sticker_01
-                "img_sticker_02" -> R.drawable.img_sticker_02
-                "img_sticker_03" -> R.drawable.img_sticker_03
                 else -> 0
             }
 

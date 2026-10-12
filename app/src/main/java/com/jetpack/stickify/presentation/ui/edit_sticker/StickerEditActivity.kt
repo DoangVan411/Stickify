@@ -74,6 +74,7 @@ class StickerEditActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_PROJECT_ID = "extra_project_id"
         const val EXTRA_CROPPED_IMAGE_URI = "extra_cropped_image_uri"
+        const val EXTRA_TEMPLATE_ID = "extra_template_id"
         const val EXTRA_RESULT_URI = "extra_result_uri"
     }
 
@@ -158,7 +159,20 @@ class StickerEditActivity : AppCompatActivity() {
             return
         }
 
-        // 2. Kiểm tra nếu mở từ CutoutActivity qua Uri (Legacy Flow)
+        // 2. Kiểm tra nếu mở từ Template flow
+        val templateId = intent.getStringExtra(EXTRA_TEMPLATE_ID)
+        val templateUri: Uri? = intent.getParcelableExtra(EXTRA_CROPPED_IMAGE_URI)
+        if (!templateId.isNullOrBlank() && templateUri != null) {
+            val newId = editViewModel.uiState.value.projectId ?: "proj_${System.currentTimeMillis()}"
+            currentProjectId = newId
+            isProjectMode = true
+            isNewProject = true
+            editViewModel.initTemplateProject(this, newId, templateId, templateUri.toString())
+            sharedViewModel.loadAndPrepareStyles(templateUri.toString())
+            return
+        }
+
+        // 3. Kiểm tra nếu mở từ CutoutActivity qua Uri (Legacy Flow)
         val uri: Uri? = intent.getParcelableExtra(EXTRA_CROPPED_IMAGE_URI)
         if (uri != null) {
             // Giữ nguyên id khi Activity bị tạo lại (xoay màn hình)

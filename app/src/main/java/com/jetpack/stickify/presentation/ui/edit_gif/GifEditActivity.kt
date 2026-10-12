@@ -36,7 +36,6 @@ import com.jetpack.stickify.domain.model.ProjectOrigin
 import com.jetpack.stickify.domain.model.ProjectType
 import com.jetpack.stickify.domain.model.StickerProject
 import com.jetpack.stickify.domain.model.TextAlign
-import com.jetpack.stickify.domain.repository.ProjectRepository
 import com.jetpack.stickify.presentation.ui.edit_sticker.StickerPreviewActivity
 import com.jetpack.stickify.presentation.ui.edit_sticker.StickerSharedViewModel
 import com.jetpack.stickify.presentation.ui.edit_sticker.cancel.SaveConfirmDialogFragment
@@ -77,13 +76,12 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
         const val EXTRA_START_MS = "extra_start_ms"
         const val EXTRA_END_MS = "extra_end_ms"
         const val EXTRA_RESULT_GIF_URI = "extra_result_gif_uri"
+        const val EXTRA_PROJECT_ID = "extra_project_id"
+        const val EXTRA_SPEED = "extra_speed"
     }
 
     private lateinit var binding: ActivityGifEditBinding
     private val sharedViewModel: StickerSharedViewModel by viewModels()
-
-    @Inject
-    lateinit var projectRepository: ProjectRepository
 
     private var videoUri: Uri? = null
     private var startTrimMs: Long = 0L
@@ -96,6 +94,7 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
     private var videoWidth = 0
     private var videoHeight = 0
     private var currentSpeed = 1.0f
+    private var currentProjectId: String? = null
 
     private var playbackLoopJob: Job? = null
     private var decorToolFragment: DecorToolFragment? = null
@@ -111,6 +110,11 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
         videoUri = uriExtra ?: uriString?.let { Uri.parse(it) }
         startTrimMs = intent.getLongExtra(EXTRA_START_MS, 0L)
         endTrimMs = intent.getLongExtra(EXTRA_END_MS, 8000L)
+        currentProjectId = intent.getStringExtra(EXTRA_PROJECT_ID)
+        val speedExtra = intent.getFloatExtra(EXTRA_SPEED, 1.0f)
+        if (speedExtra > 0f) {
+            currentSpeed = speedExtra
+        }
 
         if (videoUri == null) {
             Toast.makeText(this, "Không tìm thấy video đầu vào", Toast.LENGTH_SHORT).show()
@@ -491,35 +495,30 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
                 encoder.finish()
                 fos.close()
 
-                // Lưu thumbnail cho project
-                val thumbnailsDir = File(filesDir, "thumbnails").apply { if (!exists()) mkdirs() }
-                val thumbFile = File(thumbnailsDir, "thumb_$projectId.png")
+                // Chuẩn bị thumbnail cho project
                 val thumbBitmap = firstFrameComposite ?: withContext(Dispatchers.Main) {
                     binding.zoomableView.renderCompositeBitmap(
                         Bitmap.createBitmap(400, 400, Bitmap.Config.ARGB_8888)
                     )
                 }
-                FileOutputStream(thumbFile).use { out ->
-                    thumbBitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
-                }
 
-                // Lưu StickerProject vào Room Database
-                val now = System.currentTimeMillis()
-                val projectName = "GIF " + SimpleDateFormat("HH:mm dd/MM", Locale.getDefault()).format(Date(now))
-                val project = StickerProject(
-                    id = projectId,
-                    name = projectName,
-                    type = ProjectType.GIF,
-                    origin = ProjectOrigin.CREATED,
-                    thumbnailPath = thumbFile.absolutePath,
-                    exportedPath = outputFile.absolutePath,
-                    createdAt = now,
-                    updatedAt = now,
-                    content = ProjectContent(),
-                    history = EditHistory(),
-                    isBookmarked = false
+                val finalProjectId = currentProjectId ?: projectId
+
+                // Lưu dự án GIF qua StickerSharedViewModel -> GifProjectHandler -> SaveProjectUseCase
+                val saveResult = sharedViewModel.saveGifProject(
+                    projectId = finalProjectId,
+                    thumbBitmap = thumbBitmap,
+                    outputFile = outputFile,
+                    filesDir = filesDir,
+                    videoUri = uri.toString(),
+                    startTrimMs = startTrimMs,
+                    endTrimMs = endTrimMs,
+                    speedMultiplier = currentSpeed
                 )
-                projectRepository.saveProject(project)
+
+                if (saveResult.isFailure) {
+                    throw saveResult.exceptionOrNull() ?: Exception("Không thể lưu dự án GIF")
+                }
 
                 val fileUri = Uri.fromFile(outputFile)
 
@@ -531,7 +530,7 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
                     val previewIntent = Intent(this@GifEditActivity, StickerPreviewActivity::class.java).apply {
                         data = fileUri
                         putExtra(StickerPreviewActivity.EXTRA_STICKER_URI, fileUri)
-                        putExtra(StickerPreviewActivity.EXTRA_PROJECT_ID, projectId)
+                        putExtra(StickerPreviewActivity.EXTRA_PROJECT_ID, finalProjectId)
                         putExtra(StickerPreviewActivity.EXTRA_IS_ANIMATED, true)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }

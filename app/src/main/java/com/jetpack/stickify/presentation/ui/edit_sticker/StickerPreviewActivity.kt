@@ -52,9 +52,11 @@ class StickerPreviewActivity : AppCompatActivity() {
         stickerUri = uriExtra ?: uriString?.let { Uri.parse(it) } ?: intent.data
         projectId = intent.getStringExtra(EXTRA_PROJECT_ID)
         isAnimated = intent.getBooleanExtra(EXTRA_IS_ANIMATED, false)
+        isBookmarked = intent.getBooleanExtra(EXTRA_IS_BOOKMARKED, false)
 
         initViews()
         setupListeners()
+        updateFavoriteUI()
 
         // Entry animation for preview sticker
         ivPreviewSticker.alpha = 0f
@@ -245,5 +247,6 @@ class StickerPreviewActivity : AppCompatActivity() {
         const val EXTRA_STICKER_URI = "extra_sticker_uri"
         const val EXTRA_PROJECT_ID = "extra_project_id"
         const val EXTRA_IS_ANIMATED = "extra_is_animated"
+        const val EXTRA_IS_BOOKMARKED = "extra_is_bookmarked"
     }
 }

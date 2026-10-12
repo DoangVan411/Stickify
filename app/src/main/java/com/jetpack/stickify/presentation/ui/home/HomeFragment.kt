@@ -14,10 +14,15 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.LinearLayoutManager
+import android.net.Uri
 import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.FragmentHomeBinding
+import com.jetpack.stickify.data.source.local.converter.ProjectConverters
 import com.jetpack.stickify.domain.model.ExploreCategory
+import com.jetpack.stickify.domain.model.ProjectType
+import com.jetpack.stickify.presentation.ui.edit_gif.GifEditActivity
 import com.jetpack.stickify.presentation.ui.edit_sticker.StickerEditActivity
+import com.jetpack.stickify.presentation.ui.edit_sticker.StickerPreviewActivity
 import com.jetpack.stickify.presentation.ui.gallery.GalleryActivity
 import com.jetpack.stickify.presentation.ui.home.adapter.ExploreCategoryAdapter
 import com.jetpack.stickify.presentation.ui.home.adapter.ExploreTemplateAdapter
@@ -88,11 +93,55 @@ class HomeFragment : Fragment() {
     private fun setupRecyclerViews() {
         // Recent Projects - Horizontal (vừa vặn 3 item trên màn hình)
         recentAdapter = RecentProjectAdapter(
-            onItemClick = { projectId ->
-                val intent = Intent(requireContext(), StickerEditActivity::class.java).apply {
-                    putExtra(StickerEditActivity.EXTRA_PROJECT_ID, projectId)
+            onItemClick = { project ->
+                when (project.type) {
+                    ProjectType.GIF, ProjectType.ANIMATED_STICKER -> {
+                        val content = project.contentJson?.let {
+                            ProjectConverters().toProjectContent(it)
+                        }
+                        val videoUriStr = content?.playback?.videoUri
+                        val startTrimMs = content?.playback?.startTrimMs ?: 0L
+                        val endTrimMs = content?.playback?.endTrimMs ?: 8000L
+                        val speed = content?.playback?.speed?.multiplier?.toFloat() ?: 1.0f
+
+                        val videoUri = videoUriStr?.let { Uri.parse(it) }
+
+                        if (videoUri != null) {
+                            val intent = Intent(requireContext(), GifEditActivity::class.java).apply {
+                                putExtra(GifEditActivity.EXTRA_VIDEO_URI, videoUri)
+                                putExtra(GifEditActivity.EXTRA_START_MS, startTrimMs)
+                                putExtra(GifEditActivity.EXTRA_END_MS, endTrimMs)
+                                putExtra(GifEditActivity.EXTRA_SPEED, speed)
+                                putExtra(GifEditActivity.EXTRA_PROJECT_ID, project.id)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            startActivity(intent)
+                        } else {
+                            // Dự án cũ chưa có videoUri -> mở màn hình xem trước / quản lý
+                            val file = project.exportedPath?.let { java.io.File(it) }?.takeIf { it.exists() }
+                                ?: java.io.File(project.thumbnailPath).takeIf { it.exists() }
+                            val fileUri = file?.let { Uri.fromFile(it) }
+
+                            val intent = Intent(requireContext(), StickerPreviewActivity::class.java).apply {
+                                fileUri?.let {
+                                    data = it
+                                    putExtra(StickerPreviewActivity.EXTRA_STICKER_URI, it)
+                                }
+                                putExtra(StickerPreviewActivity.EXTRA_PROJECT_ID, project.id)
+                                putExtra(StickerPreviewActivity.EXTRA_IS_ANIMATED, true)
+                                putExtra(StickerPreviewActivity.EXTRA_IS_BOOKMARKED, project.isBookmarked)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            startActivity(intent)
+                        }
+                    }
+                    ProjectType.STICKER -> {
+                        val intent = Intent(requireContext(), StickerEditActivity::class.java).apply {
+                            putExtra(StickerEditActivity.EXTRA_PROJECT_ID, project.id)
+                        }
+                        startActivity(intent)
+                    }
                 }
-                startActivity(intent)
             },
             onActionClick = { project, action ->
                 when (action) {

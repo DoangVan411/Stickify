@@ -21,6 +21,8 @@ import com.jetpack.stickify.domain.usecase.ApplyBorderUseCase
 import com.jetpack.stickify.domain.usecase.ExportGifUseCase
 import com.jetpack.stickify.domain.usecase.ProcessStickerUseCase
 import com.jetpack.stickify.domain.usecase.SaveStickerUseCase
+import com.jetpack.stickify.domain.model.StickerProject
+import com.jetpack.stickify.presentation.ui.edit_gif.GifProjectHandler
 import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -39,7 +41,8 @@ class StickerSharedViewModel @Inject constructor(
     private val saveStickerUseCase: SaveStickerUseCase,
     private val applyBorderUseCase: ApplyBorderUseCase,
     private val exportGifUseCase: ExportGifUseCase,
-    private val assetLoader: AssetLoader
+    private val assetLoader: AssetLoader,
+    private val gifProjectHandler: GifProjectHandler
 ) : ViewModel() {
 
     private val _isLoading = MutableLiveData<Boolean>()
@@ -266,6 +269,30 @@ class StickerSharedViewModel @Inject constructor(
                 _isLoading.value = false
             }
         }
+    }
+
+    suspend fun saveGifProject(
+        projectId: String,
+        thumbBitmap: Bitmap?,
+        outputFile: File,
+        filesDir: File,
+        videoUri: String? = null,
+        startTrimMs: Long = 0L,
+        endTrimMs: Long = 8000L,
+        speedMultiplier: Float = 1.0f,
+        customName: String? = null
+    ): Result<StickerProject> {
+        return gifProjectHandler.saveGifProject(
+            projectId = projectId,
+            thumbBitmap = thumbBitmap,
+            outputFile = outputFile,
+            filesDir = filesDir,
+            videoUri = videoUri,
+            startTrimMs = startTrimMs,
+            endTrimMs = endTrimMs,
+            speedMultiplier = speedMultiplier,
+            customName = customName
+        )
     }
 
     fun selectStyle(style: StickerStyle, addToHistory: Boolean = true) {

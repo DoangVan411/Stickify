@@ -23,13 +23,21 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.graphics.drawable.toBitmap
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.lifecycleScope
 import com.jetpack.stickify.R
 import com.jetpack.stickify.data.gif.AnimatedGifEncoder
 import com.jetpack.stickify.databinding.ActivityGifEditBinding
+import com.jetpack.stickify.domain.model.EditHistory
+import com.jetpack.stickify.domain.model.ProjectContent
+import com.jetpack.stickify.domain.model.ProjectOrigin
+import com.jetpack.stickify.domain.model.ProjectType
+import com.jetpack.stickify.domain.model.StickerProject
 import com.jetpack.stickify.domain.model.TextAlign
+import com.jetpack.stickify.domain.repository.ProjectRepository
+import com.jetpack.stickify.presentation.ui.edit_sticker.StickerPreviewActivity
 import com.jetpack.stickify.presentation.ui.edit_sticker.StickerSharedViewModel
 import com.jetpack.stickify.presentation.ui.edit_sticker.cancel.SaveConfirmDialogFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.custom_view.EditorPanelView
@@ -38,6 +46,10 @@ import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorToolFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextInputOverlayController
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextStyleSpec
 import dagger.hilt.android.AndroidEntryPoint
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -69,6 +81,9 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
 
     private lateinit var binding: ActivityGifEditBinding
     private val sharedViewModel: StickerSharedViewModel by viewModels()
+
+    @Inject
+    lateinit var projectRepository: ProjectRepository
 
     private var videoUri: Uri? = null
     private var startTrimMs: Long = 0L
@@ -439,12 +454,16 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
                 val frameIntervalUs = (durationMs * 1000L) / totalFrames
                 val frameDelayMs = (1000 / (frameRateFps * currentSpeed)).toInt().coerceAtLeast(30)
 
-                val outputFile = File(cacheDir, "stickify_gif_${System.currentTimeMillis()}.gif")
+                val projectId = "proj_gif_${System.currentTimeMillis()}"
+                val stickersDir = File(filesDir, "stickers").apply { if (!exists()) mkdirs() }
+                val outputFile = File(stickersDir, "gif_${System.currentTimeMillis()}.gif")
                 val fos = FileOutputStream(outputFile)
                 val encoder = AnimatedGifEncoder()
                 encoder.start(fos)
                 encoder.setDelay(frameDelayMs)
                 encoder.setRepeat(0) // Lặp vô hạn
+
+                var firstFrameComposite: Bitmap? = null
 
                 for (i in 0 until totalFrames) {
                     val timeUs = (startTrimMs * 1000L) + i * frameIntervalUs
@@ -462,20 +481,61 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
                             binding.zoomableView.renderCompositeBitmap(scaledFrame)
                         }
 
+                        if (firstFrameComposite == null) {
+                            firstFrameComposite = compositeBitmap
+                        }
+
                         encoder.addFrame(compositeBitmap)
                     }
                 }
                 encoder.finish()
                 fos.close()
 
+                // Lưu thumbnail cho project
+                val thumbnailsDir = File(filesDir, "thumbnails").apply { if (!exists()) mkdirs() }
+                val thumbFile = File(thumbnailsDir, "thumb_$projectId.png")
+                val thumbBitmap = firstFrameComposite ?: withContext(Dispatchers.Main) {
+                    binding.zoomableView.renderCompositeBitmap(
+                        Bitmap.createBitmap(400, 400, Bitmap.Config.ARGB_8888)
+                    )
+                }
+                FileOutputStream(thumbFile).use { out ->
+                    thumbBitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
+                }
+
+                // Lưu StickerProject vào Room Database
+                val now = System.currentTimeMillis()
+                val projectName = "GIF " + SimpleDateFormat("HH:mm dd/MM", Locale.getDefault()).format(Date(now))
+                val project = StickerProject(
+                    id = projectId,
+                    name = projectName,
+                    type = ProjectType.GIF,
+                    origin = ProjectOrigin.CREATED,
+                    thumbnailPath = thumbFile.absolutePath,
+                    exportedPath = outputFile.absolutePath,
+                    createdAt = now,
+                    updatedAt = now,
+                    content = ProjectContent(),
+                    history = EditHistory(),
+                    isBookmarked = false
+                )
+                projectRepository.saveProject(project)
+
+                val fileUri = Uri.fromFile(outputFile)
+
                 withContext(Dispatchers.Main) {
                     binding.progressBar.visibility = View.GONE
                     binding.btnCreate.isEnabled = true
                     Toast.makeText(this@GifEditActivity, getString(R.string.gif_exported_success), Toast.LENGTH_SHORT).show()
-                    val resultIntent = Intent().apply {
-                        putExtra(EXTRA_RESULT_GIF_URI, Uri.fromFile(outputFile).toString())
+
+                    val previewIntent = Intent(this@GifEditActivity, StickerPreviewActivity::class.java).apply {
+                        data = fileUri
+                        putExtra(StickerPreviewActivity.EXTRA_STICKER_URI, fileUri)
+                        putExtra(StickerPreviewActivity.EXTRA_PROJECT_ID, projectId)
+                        putExtra(StickerPreviewActivity.EXTRA_IS_ANIMATED, true)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
-                    setResult(RESULT_OK, resultIntent)
+                    startActivity(previewIntent)
                     finish()
                 }
             } catch (e: Exception) {

@@ -42,7 +42,14 @@ class StickerPreviewActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_sticker_preview)
 
-        stickerUri = intent.getParcelableExtra(EXTRA_STICKER_URI)
+        val uriExtra: Uri? = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(EXTRA_STICKER_URI, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(EXTRA_STICKER_URI)
+        }
+        val uriString = intent.getStringExtra(EXTRA_STICKER_URI)
+        stickerUri = uriExtra ?: uriString?.let { Uri.parse(it) } ?: intent.data
         projectId = intent.getStringExtra(EXTRA_PROJECT_ID)
         isAnimated = intent.getBooleanExtra(EXTRA_IS_ANIMATED, false)
 

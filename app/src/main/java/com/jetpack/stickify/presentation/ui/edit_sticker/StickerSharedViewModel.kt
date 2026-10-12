@@ -153,8 +153,9 @@ class StickerSharedViewModel @Inject constructor(
         _isLoading.value = true
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val cutoutFile = if (subjectLayer.cutoutPath.isNotBlank()) {
-                    File(context.filesDir, subjectLayer.cutoutPath)
+                val cutoutPath = subjectLayer.cutoutPath
+                val cutoutFile = if (!cutoutPath.isNullOrBlank()) {
+                    File(context.filesDir, cutoutPath)
                 } else null
 
                 val originalCore: Bitmap? = if (cutoutFile != null && cutoutFile.exists()) {
@@ -168,8 +169,9 @@ class StickerSharedViewModel @Inject constructor(
                     return@launch
                 }
 
-                val cartoonFile = if (subjectLayer.cartoonCorePath.isNotBlank()) {
-                    File(context.filesDir, subjectLayer.cartoonCorePath)
+                val cartoonPath = subjectLayer.cartoonCorePath
+                val cartoonFile = if (!cartoonPath.isNullOrBlank()) {
+                    File(context.filesDir, cartoonPath)
                 } else null
 
                 val cartoonCore: Bitmap = if (cartoonFile != null && cartoonFile.exists()) {
@@ -210,7 +212,8 @@ class StickerSharedViewModel @Inject constructor(
                     SubjectStyle.ORIGINAL -> StickerStyle.ORIGINAL
                 }
 
-                val styledFile = if (subjectLayer.styledPath.isNotBlank()) File(context.filesDir, subjectLayer.styledPath) else null
+                val styledPath = subjectLayer.styledPath
+                val styledFile = if (!styledPath.isNullOrBlank()) File(context.filesDir, styledPath) else null
                 if (styledFile != null && styledFile.exists()) {
                     val styledBmp = BitmapFactory.decodeFile(styledFile.absolutePath)
                     if (styledBmp != null) {

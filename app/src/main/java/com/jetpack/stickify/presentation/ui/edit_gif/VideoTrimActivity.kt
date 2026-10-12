@@ -110,6 +110,7 @@ class VideoTrimActivity : AppCompatActivity(), TextureView.SurfaceTextureListene
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             startActivity(intent)
+            finish()
         }
     }
 

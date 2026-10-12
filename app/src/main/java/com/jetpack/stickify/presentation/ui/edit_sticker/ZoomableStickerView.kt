@@ -505,7 +505,7 @@ class ZoomableStickerView @JvmOverloads constructor(
             val asset: AssetRef? = when (layer) {
                 is DecorationLayer -> layer.asset
                 is SubjectLayer ->
-                    if (layer.styledPath.isNotBlank()) CustomAsset(layer.styledPath) else layer.source
+                    if (!layer.styledPath.isNullOrBlank()) CustomAsset(layer.styledPath) else layer.source
                 else -> null
             }
             if (asset == null) return@mapNotNull null

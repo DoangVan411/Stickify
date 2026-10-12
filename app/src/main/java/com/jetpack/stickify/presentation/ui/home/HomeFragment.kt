@@ -18,6 +18,7 @@ import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.FragmentHomeBinding
 import com.jetpack.stickify.domain.model.ExploreCategory
 import com.jetpack.stickify.presentation.ui.edit_sticker.StickerEditActivity
+import com.jetpack.stickify.presentation.ui.gallery.GalleryActivity
 import com.jetpack.stickify.presentation.ui.home.adapter.ExploreCategoryAdapter
 import com.jetpack.stickify.presentation.ui.home.adapter.ExploreTemplateAdapter
 import com.jetpack.stickify.presentation.ui.home.adapter.HorizontalSpaceItemDecoration
@@ -128,10 +129,15 @@ class HomeFragment : Fragment() {
         }
         categoryAdapter.submitList(ExploreCategory.entries.toList())
 
-        // Explore Templates - Grid (2 columns)
+        // Explore Templates - Grid (3 columns)
         exploreAdapter = ExploreTemplateAdapter(
             onItemClick = { template ->
-                // TODO: Navigate to template preview
+                val intent = Intent(requireContext(), GalleryActivity::class.java).apply {
+                    putExtra(GalleryActivity.EXTRA_MODE, GalleryActivity.MODE_TEMPLATE)
+                    putExtra(GalleryActivity.EXTRA_TEMPLATE_ID, template.id)
+                    putExtra(GalleryActivity.EXTRA_TEMPLATE_TYPE, template.type.name)
+                }
+                startActivity(intent)
             },
             onFavoriteClick = { template ->
                 // TODO: Toggle favorite

@@ -3,9 +3,11 @@ package com.jetpack.stickify.di
 import android.content.Context
 import androidx.room.Room
 import com.jetpack.stickify.data.source.local.AppDatabase
+import com.jetpack.stickify.data.source.local.MIGRATION_5_6
 import com.jetpack.stickify.data.source.local.dao.AssetDao
 import com.jetpack.stickify.data.source.local.dao.ProjectDao
 import com.jetpack.stickify.data.source.local.dao.StickerPackDao
+import com.jetpack.stickify.data.source.local.dao.TemplateDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -30,7 +32,7 @@ object DatabaseModule {
             AppDatabase::class.java,
             "stickify_database"
         )
-            .fallbackToDestructiveMigration()
+            .addMigrations(MIGRATION_5_6)
             .build()
     }
 
@@ -48,4 +50,7 @@ object DatabaseModule {
     }
     @Provides
     fun provideKeyboardDao(db: AppDatabase) = db.stickerDao()
+
+    @Provides
+    fun provideTemplateDao(db: AppDatabase): TemplateDao = db.templateDao()
 }

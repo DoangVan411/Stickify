@@ -9,6 +9,7 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
 import com.jetpack.stickify.R
 import com.jetpack.stickify.domain.model.ProjectType
 import com.jetpack.stickify.domain.model.StickerTemplate
@@ -56,26 +57,21 @@ class ExploreTemplateAdapter(
                 }
             }
 
-            // Placeholder thumbnail
-            val drawableRes = getPlaceholderDrawable(template.thumbnailUrl)
-            ivThumbnail.setImageResource(drawableRes)
+            val thumbUrl = template.thumbnailUrl
+            val glideModel = if (thumbUrl.startsWith("http://") || thumbUrl.startsWith("https://") || thumbUrl.startsWith("file://") || thumbUrl.startsWith("content://")) {
+                thumbUrl
+            } else {
+                "file:///android_asset/$thumbUrl"
+            }
+
+            Glide.with(itemView.context)
+                .load(glideModel)
+                .placeholder(R.drawable.ic_sticker_cat)
+                .error(R.drawable.ic_sticker_cat)
+                .into(ivThumbnail)
 
             ivFavorite.setOnClickListener { onFavoriteClick(template) }
             itemView.setOnClickListener { onItemClick(template) }
-        }
-
-        private fun getPlaceholderDrawable(thumbnailUrl: String): Int {
-            return when (thumbnailUrl) {
-                "explore_1" -> R.drawable.ic_placeholder_explore_1
-                "explore_2" -> R.drawable.ic_placeholder_explore_2
-                "explore_3" -> R.drawable.ic_placeholder_explore_3
-                "explore_4" -> R.drawable.ic_placeholder_explore_4
-                "explore_5" -> R.drawable.ic_placeholder_explore_5
-                "explore_6" -> R.drawable.ic_placeholder_explore_6
-                "explore_7" -> R.drawable.ic_placeholder_explore_7
-                "explore_8" -> R.drawable.ic_placeholder_explore_8
-                else -> R.drawable.ic_placeholder_explore_1
-            }
         }
     }
 

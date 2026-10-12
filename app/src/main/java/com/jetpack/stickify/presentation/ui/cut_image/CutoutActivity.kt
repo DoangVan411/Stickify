@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.core.graphics.toColorInt
 import com.jetpack.stickify.presentation.ui.edit_sticker.StickerEditActivity
+import com.jetpack.stickify.presentation.ui.gallery.GalleryActivity
 import com.jetpack.stickify.presentation.ui.home.HomeActivity
 
 /**
@@ -223,8 +224,12 @@ class CutoutActivity : AppCompatActivity() {
                     setResult(RESULT_OK, resultIntent)
                     finish()
                 } else {
+                    val templateId = intent.getStringExtra(GalleryActivity.EXTRA_TEMPLATE_ID)
                     val intent = Intent(this@CutoutActivity, StickerEditActivity::class.java).apply {
                         putExtra(EXTRA_CROPPED_IMAGE_URI, croppedUri)
+                        if (!templateId.isNullOrEmpty()) {
+                            putExtra(StickerEditActivity.EXTRA_TEMPLATE_ID, templateId)
+                        }
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
                     editStickerLauncher.launch(intent)

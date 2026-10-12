@@ -11,6 +11,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jetpack.stickify.data.source.local.AssetLoader
 import com.jetpack.stickify.domain.model.*
+import com.jetpack.stickify.domain.repository.ProjectRepository
 import com.jetpack.stickify.domain.usecase.GetProjectByIdUseCase
 import com.jetpack.stickify.domain.usecase.SaveProjectUseCase
 import com.jetpack.stickify.domain.usecase.UpdateProjectThumbnailUseCase
@@ -60,6 +61,7 @@ class StickerEditViewModel @Inject constructor(
     private val getProjectByIdUseCase: GetProjectByIdUseCase,
     private val saveProjectUseCase: SaveProjectUseCase,
     private val updateProjectThumbnailUseCase: UpdateProjectThumbnailUseCase,
+    private val projectRepository: ProjectRepository,
     val assetLoader: AssetLoader
 ) : ViewModel() {
 
@@ -244,6 +246,66 @@ class StickerEditViewModel @Inject constructor(
                     projectId = projectId,
                     projectName = "Sticker ${System.currentTimeMillis() % 1000}",
                     editorSession = newSession,
+                    canUndo = false,
+                    canRedo = false,
+                    revision = it.revision + 1
+                )
+            }
+        }
+    }
+
+    fun initTemplateProject(
+        context: Context,
+        projectId: String,
+        templateId: String,
+        imageUriString: String
+    ) {
+        if (loadedProjectId == projectId) return
+        loadedProjectId = projectId
+        _uiState.update { it.copy(projectId = projectId) }
+
+        val appContext = context.applicationContext
+        viewModelScope.launch {
+            val relativePath = withContext(Dispatchers.IO) {
+                copyToPrivateStorage(appContext, projectId, Uri.parse(imageUriString))
+            }
+            if (relativePath == null) {
+                loadedProjectId = null
+                _uiState.update { it.copy(error = "Không thể lưu ảnh vào project") }
+                return@launch
+            }
+
+            val templateResult = projectRepository.getTemplateById(templateId)
+            val template = templateResult.getOrNull()
+            if (template == null) {
+                loadedProjectId = null
+                _uiState.update { it.copy(error = "Không tìm thấy template") }
+                return@launch
+            }
+
+            val userSubject = SubjectLayer(
+                id = "layer_subject_main",
+                transform = Transform(cx = 256f, cy = 256f, scale = 1f),
+                visible = true,
+                source = CustomAsset(relativePath),
+                cutoutPath = relativePath,
+                styledPath = relativePath,
+                isTemplatePlaceholder = false
+            )
+
+            val stickerProject = template.instantiate(userSubject)
+            val finalProject = stickerProject.copy(id = projectId)
+
+            isPersisted = false
+
+            val session = EditorSession(content = finalProject.content, history = finalProject.history)
+            _uiState.update {
+                it.copy(
+                    projectId = projectId,
+                    projectName = finalProject.name,
+                    projectType = finalProject.type,
+                    origin = ProjectOrigin.TEMPLATE,
+                    editorSession = session,
                     canUndo = false,
                     canRedo = false,
                     revision = it.revision + 1

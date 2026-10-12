@@ -1,6 +1,5 @@
 package com.jetpack.stickify.presentation.ui.gallery
 
-
 import android.Manifest
 import android.content.ContentUris
 import android.content.Intent
@@ -11,7 +10,6 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.provider.Settings
 import android.view.View
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -21,24 +19,27 @@ import androidx.recyclerview.widget.GridLayoutManager
 import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.ActivityGalleryBinding
 import com.jetpack.stickify.presentation.ui.cut_image.CutoutActivity
+import com.jetpack.stickify.presentation.ui.edit_gif.VideoTrimActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Màn hình lưới 3 cột hiển thị TOÀN BỘ ảnh + video trên máy (MediaStore),
- * sắp xếp mới nhất trước. Chọn 1 ảnh -> mở CutoutActivity với Uri ảnh đó.
- * Chọn video -> hiện tại chỉ báo Cutout không hỗ trợ video (tùy bạn mở rộng sau).
+ * Màn hình lưới 4 cột hiển thị TOÀN BỘ ảnh + video trên máy (MediaStore),
+ * sắp xếp mới nhất trước.
  */
 class GalleryActivity : AppCompatActivity() {
 
     companion object {
         private const val GRID_SPAN_COUNT = 4
+        const val EXTRA_MODE = "extra_mode"
+        const val EXTRA_TEMPLATE_ID = "extra_template_id"
+        const val EXTRA_TEMPLATE_TYPE = "extra_template_type"
+        const val MODE_TEMPLATE = "MODE_TEMPLATE"
     }
 
     private lateinit var adapter: MediaGridAdapter
-
-    private lateinit var galleryBinding : ActivityGalleryBinding
+    private lateinit var galleryBinding: ActivityGalleryBinding
 
     private val requiredPermissions: Array<String>
         get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -61,7 +62,6 @@ class GalleryActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         galleryBinding = DataBindingUtil.setContentView(this, R.layout.activity_gallery)
-
 
         adapter = MediaGridAdapter(lifecycleScope) { item -> onMediaSelected(item) }
         galleryBinding.recyclerView.layoutManager = GridLayoutManager(this, GRID_SPAN_COUNT)
@@ -86,7 +86,6 @@ class GalleryActivity : AppCompatActivity() {
             shouldShowRequestPermissionRationale(it)
         }
         if (!shouldShowRationale && !hasAllPermissions()) {
-            // Người dùng đã từ chối vĩnh viễn ("Don't ask again") -> mở Settings.
             val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                 data = Uri.fromParts("package", packageName, null)
             }
@@ -111,13 +110,17 @@ class GalleryActivity : AppCompatActivity() {
         showGallery()
         galleryBinding.loadingAnimation.visibility = View.VISIBLE
         lifecycleScope.launch {
-            val items = withContext(Dispatchers.IO) { queryAllMedia() }
+            var items = withContext(Dispatchers.IO) { queryAllMedia() }
+            val mode = intent.getStringExtra(EXTRA_MODE)
+            val templateType = intent.getStringExtra(EXTRA_TEMPLATE_TYPE)
+            if (mode == MODE_TEMPLATE && (templateType == "STICKER" || templateType == "ANIMATED_STICKER")) {
+                items = items.filter { !it.isVideo }
+            }
             galleryBinding.loadingAnimation.visibility = View.GONE
             adapter.submitList(items)
         }
     }
 
-    /** Truy vấn ảnh + video từ MediaStore, gộp lại và sắp xếp theo ngày thêm mới nhất. */
     private fun queryAllMedia(): List<MediaItem> {
         val result = mutableListOf<MediaItem>()
         result.addAll(queryImages())
@@ -178,9 +181,11 @@ class GalleryActivity : AppCompatActivity() {
     }
 
     private fun onMediaSelected(item: MediaItem) {
+        val templateId = intent.getStringExtra(EXTRA_TEMPLATE_ID)
         if (item.isVideo) {
-            val intent = Intent(this, com.jetpack.stickify.presentation.ui.edit_gif.VideoTrimActivity::class.java).apply {
-                putExtra(com.jetpack.stickify.presentation.ui.edit_gif.VideoTrimActivity.EXTRA_VIDEO_URI, item.uri)
+            val intent = Intent(this, VideoTrimActivity::class.java).apply {
+                putExtra(VideoTrimActivity.EXTRA_VIDEO_URI, item.uri)
+                if (!templateId.isNullOrEmpty()) putExtra(EXTRA_TEMPLATE_ID, templateId)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             startActivity(intent)
@@ -188,6 +193,7 @@ class GalleryActivity : AppCompatActivity() {
         }
         val intent = Intent(this, CutoutActivity::class.java).apply {
             putExtra(CutoutActivity.EXTRA_IMAGE_URI, item.uri)
+            if (!templateId.isNullOrEmpty()) putExtra(EXTRA_TEMPLATE_ID, templateId)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         startActivity(intent)

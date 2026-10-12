@@ -12,6 +12,7 @@ import androidx.lifecycle.viewModelScope
 import com.jetpack.stickify.data.processor.StickerStyleProcessor
 import com.jetpack.stickify.data.source.local.AssetLoader
 import com.jetpack.stickify.domain.model.BorderStyle
+import com.jetpack.stickify.domain.model.Layer
 import com.jetpack.stickify.domain.model.Playback
 import com.jetpack.stickify.domain.model.StickerAnimationType
 import com.jetpack.stickify.domain.model.StickerStyle
@@ -41,7 +42,7 @@ class StickerSharedViewModel @Inject constructor(
     private val saveStickerUseCase: SaveStickerUseCase,
     private val applyBorderUseCase: ApplyBorderUseCase,
     private val exportGifUseCase: ExportGifUseCase,
-    private val assetLoader: AssetLoader,
+    val assetLoader: AssetLoader,
     private val gifProjectHandler: GifProjectHandler
 ) : ViewModel() {
 
@@ -280,7 +281,8 @@ class StickerSharedViewModel @Inject constructor(
         startTrimMs: Long = 0L,
         endTrimMs: Long = 8000L,
         speedMultiplier: Float = 1.0f,
-        customName: String? = null
+        customName: String? = null,
+        layers: List<Layer> = emptyList()
     ): Result<StickerProject> {
         return gifProjectHandler.saveGifProject(
             projectId = projectId,
@@ -291,8 +293,13 @@ class StickerSharedViewModel @Inject constructor(
             startTrimMs = startTrimMs,
             endTrimMs = endTrimMs,
             speedMultiplier = speedMultiplier,
-            customName = customName
+            customName = customName,
+            layers = layers
         )
+    }
+
+    suspend fun loadGifProject(projectId: String): Result<StickerProject?> {
+        return gifProjectHandler.getProjectById(projectId)
     }
 
     fun selectStyle(style: StickerStyle, addToHistory: Boolean = true) {

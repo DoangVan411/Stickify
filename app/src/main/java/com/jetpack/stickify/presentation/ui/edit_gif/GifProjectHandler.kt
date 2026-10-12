@@ -17,14 +17,31 @@ import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
+import com.jetpack.stickify.domain.model.Layer
+import com.jetpack.stickify.domain.usecase.GetProjectByIdUseCase
+import kotlinx.coroutines.flow.firstOrNull
+
 /**
  * Handler xử lý logic lưu trữ file thumbnail và lưu StickerProject vào Room Database.
  * Được gọi thông qua StickerSharedViewModel để đảm bảo tuân thủ Clean Architecture / MVVM.
  */
 @Singleton
 class GifProjectHandler @Inject constructor(
-    private val saveProjectUseCase: SaveProjectUseCase
+    private val saveProjectUseCase: SaveProjectUseCase,
+    private val getProjectByIdUseCase: GetProjectByIdUseCase
 ) {
+
+    /**
+     * Lấy dự án theo ID để phục hồi dữ liệu khi chỉnh sửa lại.
+     */
+    suspend fun getProjectById(projectId: String): Result<StickerProject?> = withContext(Dispatchers.IO) {
+        try {
+            val project = getProjectByIdUseCase.execute(projectId).firstOrNull()
+            Result.success(project)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     /**
      * Lưu ảnh thumbnail và lưu entity StickerProject vào database qua SaveProjectUseCase.
@@ -38,7 +55,8 @@ class GifProjectHandler @Inject constructor(
         startTrimMs: Long = 0L,
         endTrimMs: Long = 8000L,
         speedMultiplier: Float = 1.0f,
-        customName: String? = null
+        customName: String? = null,
+        layers: List<Layer> = emptyList()
     ): Result<StickerProject> = withContext(Dispatchers.IO) {
         try {
             // 1. Lưu thumbnail PNG
@@ -50,7 +68,7 @@ class GifProjectHandler @Inject constructor(
                 }
             }
 
-            // 2. Tạo đối tượng StickerProject kèm playback metadata
+            // 2. Tạo đối tượng StickerProject kèm playback metadata & layers
             val now = System.currentTimeMillis()
             val projectName = customName ?: ("GIF " + SimpleDateFormat("HH:mm dd/MM", Locale.getDefault()).format(Date(now)))
             val playback = com.jetpack.stickify.domain.model.Playback(
@@ -74,7 +92,7 @@ class GifProjectHandler @Inject constructor(
                 exportedPath = outputFile.absolutePath,
                 createdAt = now,
                 updatedAt = now,
-                content = ProjectContent(playback = playback),
+                content = ProjectContent(playback = playback, layers = layers),
                 history = EditHistory(),
                 isBookmarked = false
             )

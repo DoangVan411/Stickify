@@ -309,6 +309,9 @@ class ZoomableStickerView @JvmOverloads constructor(
             invalidate()
         }
 
+    /** Nếu false, vô hiệu hóa pan và zoom trên canvas nền (ví dụ: dùng cho lớp phủ video GifEditActivity) */
+    var allowCanvasTransform: Boolean = true
+
     data class DecorSnapshot(
         val items: List<DecorItemState>,
         val strokes: List<List<String>>
@@ -442,6 +445,109 @@ class ZoomableStickerView @JvmOverloads constructor(
             canvas.restore()
         }
         return result
+    }
+
+    /**
+     * Xuất danh sách decorItems hiện tại thành List<Layer> để lưu vào StickerProject (Room DB).
+     * Text -> TextLayer, Hình ảnh/nhãn -> DecorationLayer (file PNG lưu trong filesDir/projects/{projectId}/).
+     */
+    fun exportDecorLayers(projectId: String, filesDir: java.io.File): List<Layer> {
+        val layers = mutableListOf<Layer>()
+        val projectDir = java.io.File(filesDir, "projects/$projectId").apply { if (!exists()) mkdirs() }
+        val bw = baseWidth().coerceAtLeast(1f)
+
+        for (decor in decorItems) {
+            val tf = Transform(
+                cx = decor.x,
+                cy = decor.y,
+                scale = decor.scale,
+                rotationDeg = decor.rotation
+            )
+            if (decor.textContent != null) {
+                val fontId = decor.textStyle?.encode() ?: ""
+                layers.add(
+                    TextLayer(
+                        id = decor.id,
+                        transform = tf,
+                        content = decor.textContent ?: "",
+                        fontId = fontId,
+                        colorArgb = decor.textColor ?: Color.WHITE,
+                        align = decor.textAlign ?: TextAlign.CENTER,
+                        fontSizeRatio = (decor.width / (bw * 0.55f)).coerceIn(0.5f, 3f)
+                    )
+                )
+            } else {
+                val decorFile = java.io.File(projectDir, "decor_${decor.id}.png")
+                try {
+                    java.io.FileOutputStream(decorFile).use { out ->
+                        decor.bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    }
+                    layers.add(
+                        DecorationLayer(
+                            id = decor.id,
+                            transform = tf,
+                            asset = CustomAsset("projects/$projectId/decor_${decor.id}.png")
+                        )
+                    )
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+        return layers
+    }
+
+    /**
+     * Khôi phục các layer chữ/trang trí từ StickerProject vào danh sách decorItems để tiếp tục chỉnh sửa.
+     */
+    suspend fun restoreDecorLayers(layers: List<Layer>, assetLoader: AssetLoader) {
+        if (layers.isEmpty()) return
+
+        for (layer in layers) {
+            if (!layer.visible) continue
+            if (decorItems.any { it.id == layer.id }) continue
+            val tf = layer.transform
+
+            if (layer is TextLayer) {
+                if (layer.content.isBlank()) continue
+                val style = TextStyleSpec.decode(layer.fontId)
+                val textBitmap = TextStyleRenderer.render(
+                    text = layer.content,
+                    colorArgb = layer.colorArgb,
+                    align = layer.align,
+                    style = style,
+                    italic = layer.italic
+                )
+                val decor = createDecorState(
+                    id = layer.id,
+                    bitmap = textBitmap,
+                    x = tf.cx,
+                    y = tf.cy,
+                    widthRatio = (0.55f * layer.fontSizeRatio).coerceIn(0.2f, 1.5f)
+                )
+                decor.scale = tf.scale
+                decor.rotation = tf.rotationDeg
+                decor.textContent = layer.content
+                decor.textColor = layer.colorArgb
+                decor.textStyle = style
+                decor.textAlign = layer.align
+                decorItems.add(decor)
+            } else if (layer is DecorationLayer) {
+                val bmp = assetLoader.loadBitmap(layer.asset) ?: continue
+                val decor = createDecorState(
+                    id = layer.id,
+                    bitmap = bmp,
+                    x = tf.cx,
+                    y = tf.cy,
+                    widthRatio = 0.45f
+                )
+                decor.scale = tf.scale
+                decor.rotation = tf.rotationDeg
+                decorItems.add(decor)
+            }
+        }
+        invalidate()
+        notifyHistoryChanged()
     }
 
     fun setBitmap(bitmap: Bitmap, animate: Boolean = true) {
@@ -1278,8 +1384,8 @@ class ZoomableStickerView @JvmOverloads constructor(
 
     // ---------- Touch: pinch zoom + pan + decor rotate/scale + handle ----------
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        // Chỉ dùng ScaleGestureDetector khi KHÔNG thao tác trên decor
-        if (!isDraggingDecor && !isDraggingHandle) {
+        // Chỉ dùng ScaleGestureDetector khi KHÔNG thao tác trên decor và cho phép biến đổi canvas
+        if (!isDraggingDecor && !isDraggingHandle && allowCanvasTransform) {
             scaleGestureDetector.onTouchEvent(event)
         }
 
@@ -1480,12 +1586,17 @@ class ZoomableStickerView @JvmOverloads constructor(
                 }
                 // ---- Pan canvas ----
                 else if (isPanning && !scaleGestureDetector.isInProgress) {
-                    val cx = averageX(event)
-                    val cy = averageY(event)
-                    displayMatrix.postTranslate(cx - lastTouchX, cy - lastTouchY)
-                    lastTouchX = cx
-                    lastTouchY = cy
-                    invalidate()
+                    if (allowCanvasTransform) {
+                        val cx = averageX(event)
+                        val cy = averageY(event)
+                        displayMatrix.postTranslate(cx - lastTouchX, cy - lastTouchY)
+                        lastTouchX = cx
+                        lastTouchY = cy
+                        invalidate()
+                    } else {
+                        lastTouchX = averageX(event)
+                        lastTouchY = averageY(event)
+                    }
                 } else {
                     lastTouchX = averageX(event)
                     lastTouchY = averageY(event)
@@ -1639,6 +1750,7 @@ class ZoomableStickerView @JvmOverloads constructor(
 
     private inner class ScaleListener : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(detector: ScaleGestureDetector): Boolean {
+            if (!allowCanvasTransform) return true
             // Khi đang thao tác trên decor, bỏ qua ScaleGestureDetector (dùng logic tự tính span)
             if (isDraggingDecor) return true
 

@@ -36,6 +36,7 @@ class GalleryActivity : AppCompatActivity() {
         const val EXTRA_TEMPLATE_ID = "extra_template_id"
         const val EXTRA_TEMPLATE_TYPE = "extra_template_type"
         const val MODE_TEMPLATE = "MODE_TEMPLATE"
+        const val MODE_VIDEO_ONLY = "MODE_VIDEO_ONLY"
     }
 
     private lateinit var adapter: MediaGridAdapter
@@ -110,11 +111,18 @@ class GalleryActivity : AppCompatActivity() {
         showGallery()
         galleryBinding.loadingAnimation.visibility = View.VISIBLE
         lifecycleScope.launch {
-            var items = withContext(Dispatchers.IO) { queryAllMedia() }
             val mode = intent.getStringExtra(EXTRA_MODE)
             val templateType = intent.getStringExtra(EXTRA_TEMPLATE_TYPE)
-            if (mode == MODE_TEMPLATE && (templateType == "STICKER" || templateType == "ANIMATED_STICKER")) {
-                items = items.filter { !it.isVideo }
+            val items = withContext(Dispatchers.IO) {
+                if (mode == MODE_VIDEO_ONLY) {
+                    queryVideos().sortedByDescending { it.dateAddedSeconds }
+                } else {
+                    var all = queryAllMedia()
+                    if (mode == MODE_TEMPLATE && (templateType == "STICKER" || templateType == "ANIMATED_STICKER")) {
+                        all = all.filter { !it.isVideo }
+                    }
+                    all
+                }
             }
             galleryBinding.loadingAnimation.visibility = View.GONE
             adapter.submitList(items)

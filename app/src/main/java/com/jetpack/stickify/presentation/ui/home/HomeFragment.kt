@@ -201,7 +201,9 @@ class HomeFragment : Fragment() {
 
     private fun setupClickListeners() {
         binding.cardCreateGif.setOnClickListener {
-            val intent = Intent(requireContext(), com.jetpack.stickify.presentation.ui.gallery.GalleryActivity::class.java)
+            val intent = Intent(requireContext(), GalleryActivity::class.java).apply {
+                putExtra(GalleryActivity.EXTRA_MODE, GalleryActivity.MODE_VIDEO_ONLY)
+            }
             startActivity(intent)
         }
         binding.ivCreateGif.setOnClickListener {

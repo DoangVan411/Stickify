@@ -28,33 +28,90 @@ class KeyboardStickerRepositoryImpl @Inject constructor(
     override suspend fun addFromUri(uriString: String, animated: Boolean, sourceId: String?): Result<Long> = withContext(Dispatchers.IO) {
         try {
             val uri = Uri.parse(uriString)
-            val mimeType = if (animated) "image/webp" else "image/png"
-            val extension = if (animated) "webp" else "png"
+            val isGif = uriString.endsWith(".gif", ignoreCase = true) ||
+                    uri.path?.endsWith(".gif", ignoreCase = true) == true ||
+                    (runCatching { context.contentResolver.getType(uri) }.getOrNull() == "image/gif")
+
+            val mimeType = when {
+                isGif -> "image/gif"
+                animated -> "image/webp"
+                else -> "image/png"
+            }
+            val extension = when {
+                isGif -> "gif"
+                animated -> "webp"
+                else -> "png"
+            }
             val fileName = "keyboard_sticker_${UUID.randomUUID()}.$extension"
 
             val targetFile = File(context.filesDir, "keyboard_stickers").apply {
                 if (!exists()) mkdirs()
             }.let { File(it, fileName) }
 
-            context.contentResolver.openInputStream(uri)?.use { input ->
+            val finalAnimated = animated || isGif
+
+            val inputStream = try {
+                when {
+                    uri.scheme == null || uri.scheme == "file" -> {
+                        val filePath = uri.path ?: uriString
+                        val file = File(filePath)
+                        if (file.exists()) file.inputStream() else context.contentResolver.openInputStream(uri)
+                    }
+                    uri.scheme == "content" -> {
+                        try {
+                            context.contentResolver.openInputStream(uri)
+                        } catch (sec: Exception) {
+                            val local = resolveLocalFile(uri)
+                            if (local != null && local.exists()) local.inputStream() else throw sec
+                        }
+                    }
+                    else -> context.contentResolver.openInputStream(uri)
+                }
+            } catch (e: Exception) {
+                val local = resolveLocalFile(uri)
+                if (local != null && local.exists()) {
+                    local.inputStream()
+                } else {
+                    android.util.Log.e("KeyboardStickerRepo", "Failed to open stream for $uriString: ${e.message}", e)
+                    null
+                }
+            }
+
+            inputStream?.use { input ->
                 FileOutputStream(targetFile).use { output ->
                     input.copyTo(output)
                 }
-            } ?: return@withContext Result.failure(Exception("Cannot open input stream from uri"))
+            } ?: return@withContext Result.failure(Exception("Cannot open input stream from uri: $uriString"))
 
             val entity = KeyboardStickerEntity(
                 sourceId = sourceId,
                 fileName = targetFile.absolutePath,
                 mimeType = mimeType,
-                isAnimated = animated,
+                isAnimated = finalAnimated,
                 createdAt = System.currentTimeMillis()
             )
 
             val id = dao.insert(entity)
             Result.success(id)
         } catch (e: Exception) {
+            android.util.Log.e("KeyboardStickerRepo", "Error adding sticker: ${e.message}", e)
             Result.failure(e)
         }
+    }
+
+    private fun resolveLocalFile(uri: Uri): File? {
+        val path = uri.path ?: return null
+        val filename = File(path).name
+        val candidates = listOf(
+            File(context.filesDir, path.removePrefix("/")),
+            File(context.filesDir, "stickers/$filename"),
+            File(context.filesDir, "keyboard_stickers/$filename"),
+            File(context.cacheDir, path.removePrefix("/")),
+            File(context.cacheDir, "cutouts/$filename"),
+            File(context.cacheDir, filename),
+            File(path)
+        )
+        return candidates.firstOrNull { it.exists() && it.isFile }
     }
 
     override suspend fun markUsed(id: Long) = withContext(Dispatchers.IO) {

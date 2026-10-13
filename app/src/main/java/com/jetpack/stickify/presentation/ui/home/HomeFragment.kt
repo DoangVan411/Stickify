@@ -105,6 +105,12 @@ class HomeFragment : Fragment() {
                         val dialog = EditNameDialogFragment.newInstance(project.id, project.name)
                         dialog.show(childFragmentManager, EditNameDialogFragment.TAG)
                     }
+                    RecentAction.ADD_TO_EXPLORE -> {
+                        viewModel.addToExplore(project) { success ->
+                            val msg = if (success) "Đã thêm vào mục Khám phá!" else "Lỗi khi thêm vào khám phá"
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
+                    }
                     RecentAction.DELETE -> {
                         val dialog = ConfirmDeleteProjectDialogFragment.newInstance(project.id, project.name)
                         dialog.show(childFragmentManager, ConfirmDeleteProjectDialogFragment.TAG)

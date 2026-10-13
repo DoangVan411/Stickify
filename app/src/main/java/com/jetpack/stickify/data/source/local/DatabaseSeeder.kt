@@ -50,22 +50,33 @@ class DatabaseSeeder @Inject constructor(
                     id = "layer_subject_placeholder",
                     transform = Transform(cx = 256f, cy = 256f, scale = 1f),
                     visible = true,
-                    source = BuiltinAsset(assetId = "ic_sample_01.png", packId = "pack_comic"),
+                    source = BuiltinAsset(assetId = "ic_sticker_cat.png", packId = "pack_comic"),
                     isTemplatePlaceholder = true
                 )
 
+                // Template 1 (4+ items: bg, placeholder, decor 1, text)
                 val t1Content = ProjectContent(
                     canvas = CanvasSpec(width = 512, height = 512),
                     layers = listOf(
                         DecorationLayer(
-                            id = "layer_bg_1",
+                            id = "t1_bg",
                             transform = Transform(cx = 256f, cy = 256f, scale = 1f),
                             asset = BuiltinAsset(assetId = "bg_gradient_pastel.png", packId = "pack_default")
                         ),
+                        DecorationLayer(
+                            id = "t1_dec1",
+                            transform = Transform(cx = 110f, cy = 110f, scale = 0.8f, rotationDeg = -15f),
+                            asset = BuiltinAsset(assetId = "img_decor_1.png", packId = "pack_default")
+                        ),
                         placeholderSubject,
+                        DecorationLayer(
+                            id = "t1_dec2",
+                            transform = Transform(cx = 410f, cy = 120f, scale = 1f, rotationDeg = 20f),
+                            asset = BuiltinAsset(assetId = "img_heart.png", packId = "pack_comic")
+                        ),
                         TextLayer(
-                            id = "layer_txt_1",
-                            transform = Transform(cx = 256f, cy = 420f, scale = 1f),
+                            id = "t1_txt",
+                            transform = Transform(cx = 256f, cy = 440f, scale = 1f),
                             content = "SURPRISED!",
                             colorArgb = Color.parseColor("#FFD54F")
                         )
@@ -73,105 +84,200 @@ class DatabaseSeeder @Inject constructor(
                     playback = Playback(speed = PlaybackSpeed.X2, loop = true, animationType = StickerAnimationType.BOUNCE)
                 )
 
+                // Template 2 (4+ items)
                 val t2Content = ProjectContent(
                     canvas = CanvasSpec(width = 512, height = 512),
                     layers = listOf(
+                        DecorationLayer(
+                            id = "t2_bg",
+                            transform = Transform(cx = 256f, cy = 256f, scale = 1f),
+                            asset = BuiltinAsset(assetId = "bg_holographic.png", packId = "pack_default")
+                        ),
+                        DecorationLayer(
+                            id = "t2_dec1",
+                            transform = Transform(cx = 100f, cy = 400f, scale = 0.9f),
+                            asset = BuiltinAsset(assetId = "img_decor_2.png", packId = "pack_default")
+                        ),
                         placeholderSubject,
                         DecorationLayer(
-                            id = "layer_dec_2",
-                            transform = Transform(cx = 380f, cy = 150f, scale = 1f),
-                            asset = BuiltinAsset(assetId = "heart.png", packId = "pack_default")
+                            id = "t2_dec2",
+                            transform = Transform(cx = 410f, cy = 100f, scale = 1f, rotationDeg = 15f),
+                            asset = BuiltinAsset(assetId = "img_decor_5.png", packId = "pack_more")
                         ),
                         TextLayer(
-                            id = "layer_txt_2",
-                            transform = Transform(cx = 256f, cy = 430f, scale = 1f),
-                            content = "Hi There!",
+                            id = "t2_txt",
+                            transform = Transform(cx = 256f, cy = 440f, scale = 1f),
+                            content = "Hello!",
                             colorArgb = Color.parseColor("#2196F3")
                         )
                     ),
                     border = BorderStyle(thickness = 10f, spacing = 2f, colorArgb = Color.WHITE)
                 )
 
+                // Template 3 (4+ items)
                 val t3Content = ProjectContent(
                     canvas = CanvasSpec(width = 512, height = 512),
                     layers = listOf(
+                        DecorationLayer(
+                            id = "t3_dec1",
+                            transform = Transform(cx = 256f, cy = 256f, scale = 1.2f),
+                            asset = BuiltinAsset(assetId = "img_decor_6.png", packId = "pack_more")
+                        ),
                         placeholderSubject,
                         DecorationLayer(
-                            id = "layer_dec_3",
-                            transform = Transform(cx = 120f, cy = 120f, scale = 1f),
-                            asset = BuiltinAsset(assetId = "ic_sample_02.png", packId = "pack_comic")
+                            id = "t3_dec2",
+                            transform = Transform(cx = 80f, cy = 80f, scale = 0.8f, rotationDeg = -10f),
+                            asset = BuiltinAsset(assetId = "img_decor_3.png", packId = "pack_default")
                         ),
                         TextLayer(
-                            id = "layer_txt_3",
+                            id = "t3_txt",
                             transform = Transform(cx = 256f, cy = 440f, scale = 1.1f),
-                            content = "OKE!",
+                            content = "OK!",
                             colorArgb = Color.parseColor("#4CAF50")
                         )
-                    )
+                    ),
+                    border = BorderStyle(thickness = 12f, spacing = 4f, colorArgb = Color.BLACK)
                 )
 
+                // Template 4 (4+ items)
                 val t4Content = ProjectContent(
                     canvas = CanvasSpec(width = 512, height = 512),
                     layers = listOf(
                         DecorationLayer(
-                            id = "layer_bg_4",
+                            id = "t4_bg",
                             transform = Transform(cx = 256f, cy = 256f, scale = 1f),
-                            asset = BuiltinAsset(assetId = "bg_holographic.png", packId = "pack_default")
+                            asset = BuiltinAsset(assetId = "bg_gradient_pastel.png", packId = "pack_default")
                         ),
-                        placeholderSubject
+                        placeholderSubject,
+                        DecorationLayer(
+                            id = "t4_dec1",
+                            transform = Transform(cx = 390f, cy = 380f, scale = 1f, rotationDeg = 10f),
+                            asset = BuiltinAsset(assetId = "img_decor_4.png", packId = "pack_default")
+                        ),
+                        DecorationLayer(
+                            id = "t4_dec2",
+                            transform = Transform(cx = 120f, cy = 100f, scale = 0.9f, rotationDeg = -15f),
+                            asset = BuiltinAsset(assetId = "img_decor_7.png", packId = "pack_more")
+                        ),
+                        TextLayer(
+                            id = "t4_txt",
+                            transform = Transform(cx = 256f, cy = 440f, scale = 1f),
+                            content = "OMG!",
+                            colorArgb = Color.parseColor("#E91E63")
+                        )
                     ),
                     playback = Playback(speed = PlaybackSpeed.X2, loop = true, animationType = StickerAnimationType.SPIN)
                 )
 
+                // Template 5 (4+ items)
                 val t5Content = ProjectContent(
                     canvas = CanvasSpec(width = 512, height = 512),
                     layers = listOf(
+                        DecorationLayer(
+                            id = "t5_dec1",
+                            transform = Transform(cx = 110f, cy = 110f, scale = 1f),
+                            asset = BuiltinAsset(assetId = "img_decor_5.png", packId = "pack_more")
+                        ),
                         placeholderSubject,
+                        DecorationLayer(
+                            id = "t5_dec2",
+                            transform = Transform(cx = 400f, cy = 400f, scale = 0.9f, rotationDeg = -12f),
+                            asset = BuiltinAsset(assetId = "img_decor_7.png", packId = "pack_more")
+                        ),
                         TextLayer(
-                            id = "layer_txt_5",
-                            transform = Transform(cx = 256f, cy = 100f, scale = 1.2f),
-                            content = "Hello Friend!",
-                            colorArgb = Color.parseColor("#E91E63")
+                            id = "t5_txt",
+                            transform = Transform(cx = 256f, cy = 440f, scale = 1.2f),
+                            content = "Awesome!",
+                            colorArgb = Color.parseColor("#9C27B0")
                         )
                     ),
                     border = BorderStyle(thickness = 8f, spacing = 2f, colorArgb = Color.WHITE)
                 )
 
+                // Template 6 (4+ items)
                 val t6Content = ProjectContent(
                     canvas = CanvasSpec(width = 512, height = 512),
                     layers = listOf(
+                        DecorationLayer(
+                            id = "t6_bg",
+                            transform = Transform(cx = 256f, cy = 256f, scale = 1f),
+                            asset = BuiltinAsset(assetId = "bg_holographic.png", packId = "pack_default")
+                        ),
                         placeholderSubject,
                         DecorationLayer(
-                            id = "layer_dec_6",
-                            transform = Transform(cx = 400f, cy = 400f, scale = 0.9f),
-                            asset = BuiltinAsset(assetId = "ic_sample_03.png", packId = "pack_comic")
+                            id = "t6_dec1",
+                            transform = Transform(cx = 90f, cy = 420f, scale = 1.1f),
+                            asset = BuiltinAsset(assetId = "img_decor_8.png", packId = "pack_comic")
+                        ),
+                        DecorationLayer(
+                            id = "t6_dec2",
+                            transform = Transform(cx = 420f, cy = 90f, scale = 0.8f, rotationDeg = 15f),
+                            asset = BuiltinAsset(assetId = "img_heart.png", packId = "pack_comic")
+                        ),
+                        TextLayer(
+                            id = "t6_txt",
+                            transform = Transform(cx = 256f, cy = 440f, scale = 1f),
+                            content = "Nice!",
+                            colorArgb = Color.parseColor("#FF9800")
                         )
                     )
                 )
 
+                // Template 7 (4+ items)
                 val t7Content = ProjectContent(
                     canvas = CanvasSpec(width = 512, height = 512),
                     layers = listOf(
                         placeholderSubject,
+                        DecorationLayer(
+                            id = "t7_dec1",
+                            transform = Transform(cx = 410f, cy = 90f, scale = 0.85f, rotationDeg = 25f),
+                            asset = BuiltinAsset(assetId = "img_decor_1.png", packId = "pack_default")
+                        ),
+                        DecorationLayer(
+                            id = "t7_dec2",
+                            transform = Transform(cx = 90f, cy = 410f, scale = 0.85f, rotationDeg = -25f),
+                            asset = BuiltinAsset(assetId = "img_decor_2.png", packId = "pack_default")
+                        ),
+                        DecorationLayer(
+                            id = "t7_dec3",
+                            transform = Transform(cx = 256f, cy = 80f, scale = 1f),
+                            asset = BuiltinAsset(assetId = "img_decor_5.png", packId = "pack_more")
+                        ),
                         TextLayer(
-                            id = "layer_txt_7",
-                            transform = Transform(cx = 256f, cy = 450f, scale = 1.3f),
-                            content = "WOW!",
-                            colorArgb = Color.parseColor("#FF9800")
+                            id = "t7_txt",
+                            transform = Transform(cx = 256f, cy = 440f, scale = 1.3f),
+                            content = "Wow!",
+                            colorArgb = Color.parseColor("#00BCD4")
                         )
                     ),
                     playback = Playback(speed = PlaybackSpeed.X4, loop = true, animationType = StickerAnimationType.PULSE)
                 )
 
+                // Template 8 (4+ items)
                 val t8Content = ProjectContent(
                     canvas = CanvasSpec(width = 512, height = 512),
                     layers = listOf(
+                        DecorationLayer(
+                            id = "t8_bg",
+                            transform = Transform(cx = 256f, cy = 256f, scale = 1f),
+                            asset = BuiltinAsset(assetId = "bg_gradient_pastel.png", packId = "pack_default")
+                        ),
                         placeholderSubject,
+                        DecorationLayer(
+                            id = "t8_dec1",
+                            transform = Transform(cx = 390f, cy = 390f, scale = 1f, rotationDeg = 10f),
+                            asset = BuiltinAsset(assetId = "img_decor_3.png", packId = "pack_default")
+                        ),
+                        DecorationLayer(
+                            id = "t8_dec2",
+                            transform = Transform(cx = 100f, cy = 100f, scale = 0.8f, rotationDeg = -10f),
+                            asset = BuiltinAsset(assetId = "img_heart.png", packId = "pack_comic")
+                        ),
                         TextLayer(
-                            id = "layer_txt_8",
-                            transform = Transform(cx = 256f, cy = 80f, scale = 1f),
-                            content = "Cute Sticker",
-                            colorArgb = Color.parseColor("#9C27B0")
+                            id = "t8_txt",
+                            transform = Transform(cx = 256f, cy = 440f, scale = 1f),
+                            content = "Sweet!",
+                            colorArgb = Color.parseColor("#E91E63")
                         )
                     )
                 )
@@ -191,7 +297,7 @@ class DatabaseSeeder @Inject constructor(
                         title = "Hi!",
                         type = ProjectType.STICKER,
                         tags = listOf("cute", "stickers"),
-                        thumbnailUrl = "stickers/pack_comic/ic_sample_01.png",
+                        thumbnailUrl = "stickers/pack_comic/ic_sticker_cat.png",
                         contentJson = GsonProvider.gson.toJson(t2Content)
                     ),
                     StickerTemplateEntity(
@@ -199,7 +305,7 @@ class DatabaseSeeder @Inject constructor(
                         title = "Oke!",
                         type = ProjectType.STICKER,
                         tags = listOf("cute", "stickers"),
-                        thumbnailUrl = "stickers/pack_comic/ic_sample_02.png",
+                        thumbnailUrl = "stickers/pack_comic/ic_sticker_dog.png",
                         contentJson = GsonProvider.gson.toJson(t3Content)
                     ),
                     StickerTemplateEntity(
@@ -216,7 +322,7 @@ class DatabaseSeeder @Inject constructor(
                         title = "Hi!",
                         type = ProjectType.STICKER,
                         tags = listOf("cute", "stickers"),
-                        thumbnailUrl = "stickers/pack_comic/ic_sample_03.png",
+                        thumbnailUrl = "stickers/pack_more/ic_sample_01.png",
                         contentJson = GsonProvider.gson.toJson(t5Content)
                     ),
                     StickerTemplateEntity(
@@ -224,7 +330,7 @@ class DatabaseSeeder @Inject constructor(
                         title = "Oke!",
                         type = ProjectType.STICKER,
                         tags = listOf("meme", "stickers"),
-                        thumbnailUrl = "backgrounds/pack_default/bg_gradient_pastel.png",
+                        thumbnailUrl = "stickers/pack_comic/ic_sticker_girl.png",
                         contentJson = GsonProvider.gson.toJson(t6Content)
                     ),
                     StickerTemplateEntity(
@@ -232,7 +338,7 @@ class DatabaseSeeder @Inject constructor(
                         title = "Surprised!",
                         type = ProjectType.GIF,
                         tags = listOf("meme", "gifs"),
-                        thumbnailUrl = "stickers/pack_comic/ic_sample_01.png",
+                        thumbnailUrl = "stickers/pack_more/img_decor_6.png",
                         contentJson = GsonProvider.gson.toJson(t7Content),
                         isAnimated = true
                     ),
@@ -241,7 +347,7 @@ class DatabaseSeeder @Inject constructor(
                         title = "Hi!",
                         type = ProjectType.STICKER,
                         tags = listOf("cute", "stickers"),
-                        thumbnailUrl = "backgrounds/pack_default/bg_holographic.png",
+                        thumbnailUrl = "stickers/pack_more/img_decor_7.png",
                         contentJson = GsonProvider.gson.toJson(t8Content)
                     )
                 )

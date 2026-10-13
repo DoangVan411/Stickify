@@ -19,6 +19,7 @@ import java.io.File
 enum class RecentAction {
     TOGGLE_FAVORITE,
     RENAME,
+    ADD_TO_EXPLORE,
     DELETE
 }
 
@@ -130,6 +131,7 @@ class RecentProjectAdapter(
             val tvFavoriteText = popupView.findViewById<TextView>(R.id.tvFavoriteText)
             val ivFavoriteIcon = popupView.findViewById<ImageView>(R.id.ivFavoriteIcon)
             val btnRename = popupView.findViewById<View>(R.id.btnRename)
+            val btnAddToExplore = popupView.findViewById<View>(R.id.btnAddToExplore)
             val btnDelete = popupView.findViewById<View>(R.id.btnDelete)
 
             if (project.isBookmarked) {
@@ -148,6 +150,11 @@ class RecentProjectAdapter(
             btnRename.setOnClickListener {
                 popupWindow.dismiss()
                 onActionClick(project, RecentAction.RENAME)
+            }
+
+            btnAddToExplore.setOnClickListener {
+                popupWindow.dismiss()
+                onActionClick(project, RecentAction.ADD_TO_EXPLORE)
             }
 
             btnDelete.setOnClickListener {

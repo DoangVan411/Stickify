@@ -2,7 +2,13 @@ package com.jetpack.stickify.presentation.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.jetpack.stickify.data.source.local.converter.GsonProvider
 import com.jetpack.stickify.domain.model.ExploreCategory
+import com.jetpack.stickify.domain.model.ProjectContent
+import com.jetpack.stickify.domain.model.ProjectEntity
+import com.jetpack.stickify.domain.model.ProjectType
+import com.jetpack.stickify.domain.model.StickerTemplate
+import com.jetpack.stickify.domain.model.SubjectLayer
 import com.jetpack.stickify.domain.repository.ProjectRepository
 import com.jetpack.stickify.domain.usecase.GetExploreTemplatesUseCase
 import com.jetpack.stickify.domain.usecase.GetRecentProjectsUseCase
@@ -97,6 +103,49 @@ class HomeViewModel @Inject constructor(
     fun updateProjectName(projectId: String, newName: String) {
         viewModelScope.launch {
             projectRepository.updateProjectName(projectId, newName)
+        }
+    }
+
+    fun addToExplore(project: ProjectEntity, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val content = if (!project.contentJson.isNullOrBlank()) {
+                try {
+                    GsonProvider.gson.fromJson(
+                        project.contentJson,
+                        ProjectContent::class.java
+                    )
+                } catch (e: Exception) {
+                    ProjectContent()
+                }
+            } else {
+                ProjectContent()
+            }
+
+            val templateContent = content.copy(
+                layers = content.layers.map { layer ->
+                    if (layer is SubjectLayer) {
+                        layer.copy(isTemplatePlaceholder = true)
+                    } else layer
+                }
+            )
+
+            val template = StickerTemplate(
+                id = "tpl_${project.id}_${System.currentTimeMillis()}",
+                title = project.name,
+                type = project.type,
+                tags = listOf("user", "custom"),
+                thumbnailUrl = project.thumbnailPath.ifBlank { "explore_1" },
+                content = templateContent,
+                isAnimated = project.type == ProjectType.GIF || project.type == ProjectType.ANIMATED_STICKER
+            )
+
+            val result = projectRepository.saveTemplate(template)
+            if (result.isSuccess) {
+                loadExploreTemplates()
+                onResult(true)
+            } else {
+                onResult(false)
+            }
         }
     }
 

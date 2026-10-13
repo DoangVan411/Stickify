@@ -24,6 +24,7 @@ interface ProjectRepository {
     fun getRecentProjectsFlow(): Flow<List<ProjectEntity>>
     suspend fun getExploreTemplates(category: ExploreCategory): Result<List<StickerTemplate>>
     suspend fun getTemplateById(templateId: String): Result<StickerTemplate?>
+    suspend fun saveTemplate(template: StickerTemplate): Result<Unit>
 
     // Favorites
     suspend fun getFavoriteStickers(): Result<List<StickerProject>>

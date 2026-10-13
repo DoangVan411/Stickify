@@ -36,7 +36,7 @@ class AiRevealSweepView @JvmOverloads constructor(
     private val d = resources.displayMetrics.density
 
     // ---- THÔNG SỐ HIỆU ỨNG ----
-    private val sweepMs = 2200L             // Thời gian 1.8s
+    private val sweepMs = 2500L             // Thời gian 2.5s
     private val fadeStartRatio = 0.4f       // Bắt đầu mờ dần đi từ 40% quãng đường
 
     private val waveColor = 0xFFB3EFFF.toInt() // Màu Cyan cực nhạt

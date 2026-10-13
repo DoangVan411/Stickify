@@ -49,10 +49,11 @@ class StickerAiClient @Inject constructor(
         }
 
         val options = IO.Options().apply {
-            transports = arrayOf("websocket")
             reconnection = false
             forceNew = true
             timeout = 15_000
+            //Ép dùng WebSocket ngay từ đầu, bỏ qua HTTP Polling
+            transports = arrayOf(io.socket.engineio.client.transports.WebSocket.NAME)
         }
         val socket = IO.socket(URI(baseUrl), options)
 

@@ -13,6 +13,7 @@ import com.bumptech.glide.Glide
 import com.jetpack.stickify.R
 import com.jetpack.stickify.domain.model.ProjectType
 import com.jetpack.stickify.domain.model.StickerTemplate
+import java.io.File
 
 /**
  * Adapter cho grid templates trong mục Khám phá.
@@ -58,10 +59,16 @@ class ExploreTemplateAdapter(
             }
 
             val thumbUrl = template.thumbnailUrl
-            val glideModel = if (thumbUrl.startsWith("http://") || thumbUrl.startsWith("https://") || thumbUrl.startsWith("file://") || thumbUrl.startsWith("content://")) {
-                thumbUrl
-            } else {
-                "file:///android_asset/$thumbUrl"
+            val glideModel: Any = when {
+                thumbUrl.startsWith("http://") || thumbUrl.startsWith("https://") || thumbUrl.startsWith("file://") || thumbUrl.startsWith("content://") -> {
+                    thumbUrl
+                }
+                thumbUrl.startsWith("/") -> {
+                    File(thumbUrl)
+                }
+                else -> {
+                    "file:///android_asset/$thumbUrl"
+                }
             }
 
             Glide.with(itemView.context)

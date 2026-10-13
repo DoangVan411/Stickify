@@ -8,6 +8,7 @@ import com.google.gson.reflect.TypeToken
 import com.jetpack.stickify.data.mapper.ProjectMapper
 import com.jetpack.stickify.data.source.local.DatabaseSeeder
 import com.jetpack.stickify.data.source.local.FakeProjectDataSource
+import com.jetpack.stickify.data.source.local.converter.GsonProvider
 import com.jetpack.stickify.data.source.local.dao.ProjectDao
 import com.jetpack.stickify.data.source.local.dao.StickerPackDao
 import com.jetpack.stickify.data.source.local.dao.TemplateDao
@@ -18,6 +19,7 @@ import com.jetpack.stickify.domain.model.StickerPack
 import com.jetpack.stickify.domain.model.StickerPackEntity
 import com.jetpack.stickify.domain.model.StickerProject
 import com.jetpack.stickify.domain.model.StickerTemplate
+import com.jetpack.stickify.domain.model.StickerTemplateEntity
 import com.jetpack.stickify.domain.repository.ProjectRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -132,6 +134,26 @@ class ProjectRepositoryImpl @Inject constructor(
             databaseSeeder.seedDatabaseIfEmpty()
             val entity = templateDao.getTemplateById(templateId)
             Result.success(entity?.toDomain())
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun saveTemplate(template: StickerTemplate): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val entity = StickerTemplateEntity(
+                id = template.id,
+                title = template.title,
+                type = template.type,
+                tags = template.tags,
+                thumbnailUrl = template.thumbnailUrl,
+                contentJson = GsonProvider.gson.toJson(template.content),
+                isBookmarked = template.isBookmarked,
+                isAnimated = template.type == ProjectType.GIF || template.type == ProjectType.ANIMATED_STICKER,
+                isPremium = template.isPremium
+            )
+            templateDao.insertTemplates(listOf(entity))
+            Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
         }

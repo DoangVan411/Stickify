@@ -56,7 +56,9 @@ class GifProjectHandler @Inject constructor(
         endTrimMs: Long = 8000L,
         speedMultiplier: Float = 1.0f,
         customName: String? = null,
-        layers: List<Layer> = emptyList()
+        layers: List<Layer> = emptyList(),
+        canvasWidth: Int = 0,
+        canvasHeight: Int = 0
     ): Result<StickerProject> = withContext(Dispatchers.IO) {
         try {
             // 1. Lưu thumbnail PNG
@@ -83,6 +85,11 @@ class GifProjectHandler @Inject constructor(
                 endTrimMs = endTrimMs,
                 videoUri = videoUri
             )
+            val canvas = if (canvasWidth > 0 && canvasHeight > 0) {
+                com.jetpack.stickify.domain.model.CanvasSpec(canvasWidth, canvasHeight)
+            } else {
+                com.jetpack.stickify.domain.model.CanvasSpec()
+            }
             val project = StickerProject(
                 id = projectId,
                 name = projectName,
@@ -92,7 +99,7 @@ class GifProjectHandler @Inject constructor(
                 exportedPath = outputFile.absolutePath,
                 createdAt = now,
                 updatedAt = now,
-                content = ProjectContent(playback = playback, layers = layers),
+                content = ProjectContent(canvas = canvas, playback = playback, layers = layers),
                 history = EditHistory(),
                 isBookmarked = false
             )

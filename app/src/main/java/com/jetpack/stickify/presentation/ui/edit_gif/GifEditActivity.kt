@@ -23,19 +23,13 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import androidx.core.graphics.drawable.toBitmap
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.lifecycleScope
 import com.jetpack.stickify.R
 import com.jetpack.stickify.data.gif.AnimatedGifEncoder
 import com.jetpack.stickify.databinding.ActivityGifEditBinding
-import com.jetpack.stickify.domain.model.EditHistory
 import com.jetpack.stickify.domain.model.Layer
-import com.jetpack.stickify.domain.model.ProjectContent
-import com.jetpack.stickify.domain.model.ProjectOrigin
-import com.jetpack.stickify.domain.model.ProjectType
-import com.jetpack.stickify.domain.model.StickerProject
 import com.jetpack.stickify.domain.model.TextAlign
 import com.jetpack.stickify.presentation.ui.edit_sticker.StickerPreviewActivity
 import com.jetpack.stickify.presentation.ui.edit_sticker.StickerSharedViewModel
@@ -46,10 +40,6 @@ import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorToolFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextInputOverlayController
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextStyleSpec
 import dagger.hilt.android.AndroidEntryPoint
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -236,11 +226,18 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
                     binding.zoomableView.exportDecorLayers(finalProjectId, filesDir)
                 }
 
+                val maxDim = 400f
+                val thumbScale = if (videoWidth > 0 && videoHeight > 0) {
+                    min(maxDim / videoWidth, maxDim / videoHeight)
+                } else 1f
+                val thumbW = if (videoWidth > 0) (videoWidth * thumbScale).toInt().coerceAtLeast(1) else 400
+                val thumbH = if (videoHeight > 0) (videoHeight * thumbScale).toInt().coerceAtLeast(1) else 400
+
                 val thumbBitmap = withContext(Dispatchers.Main) {
                     binding.zoomableView.renderCompositeBitmap(
                         Bitmap.createBitmap(
-                            videoWidth.coerceAtLeast(400),
-                            videoHeight.coerceAtLeast(400),
+                            thumbW,
+                            thumbH,
                             Bitmap.Config.ARGB_8888
                         )
                     )
@@ -255,7 +252,9 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
                     startTrimMs = startTrimMs,
                     endTrimMs = endTrimMs,
                     speedMultiplier = currentSpeed,
-                    layers = layers
+                    layers = layers,
+                    canvasWidth = videoWidth,
+                    canvasHeight = videoHeight
                 )
 
                 withContext(Dispatchers.Main) {
@@ -279,6 +278,7 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
         // Nhận sự kiện thêm Decor từ DecorToolFragment
         sharedViewModel.addedDecorEvent.observe(this) { decor ->
             if (decor != null) {
+                if (videoWidth <= 0 || videoHeight <= 0) return@observe
                 binding.zoomableView.setDrawDecorBrush(null)
                 val bitmap = decor.customBitmap ?: BitmapFactory.decodeResource(resources, decor.resId)
                 if (bitmap != null) {
@@ -292,6 +292,7 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
             if (decor == null) {
                 binding.zoomableView.setDrawDecorBrush(null)
             } else {
+                if (videoWidth <= 0 || videoHeight <= 0) return@observe
                 val bitmap = decor.customBitmap ?: runCatching {
                     BitmapFactory.decodeResource(resources, decor.resId)
                 }.getOrNull() ?: ContextCompat.getDrawable(this, decor.resId)?.toBitmap()
@@ -303,6 +304,7 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
     private fun setupTextOverlay() {
         textController = TextInputOverlayController(binding.addTextLayout) { result ->
             if (result != null) {
+                if (videoWidth <= 0 || videoHeight <= 0) return@TextInputOverlayController
                 binding.zoomableView.addTextItem(
                     text = result.text,
                     textColor = result.colorArgb,
@@ -516,6 +518,13 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
         if (w <= 0 || h <= 0) return
         val transparentBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         binding.zoomableView.setBitmap(transparentBitmap, animate = false)
+        if (binding.zoomableView.width > 0 && binding.zoomableView.height > 0) {
+            binding.zoomableView.resetTransformToFit(w.toFloat(), h.toFloat())
+        } else {
+            binding.zoomableView.post {
+                binding.zoomableView.resetTransformToFit(w.toFloat(), h.toFloat())
+            }
+        }
     }
 
     private fun adjustTextureViewSize(videoW: Int, videoH: Int) {
@@ -637,8 +646,14 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
 
                 // Chuẩn bị thumbnail cho project
                 val thumbBitmap = firstFrameComposite ?: withContext(Dispatchers.Main) {
+                    val maxDim = 400f
+                    val thumbScale = if (videoWidth > 0 && videoHeight > 0) {
+                        min(maxDim / videoWidth, maxDim / videoHeight)
+                    } else 1f
+                    val thumbW = if (videoWidth > 0) (videoWidth * thumbScale).toInt().coerceAtLeast(1) else 400
+                    val thumbH = if (videoHeight > 0) (videoHeight * thumbScale).toInt().coerceAtLeast(1) else 400
                     binding.zoomableView.renderCompositeBitmap(
-                        Bitmap.createBitmap(400, 400, Bitmap.Config.ARGB_8888)
+                        Bitmap.createBitmap(thumbW, thumbH, Bitmap.Config.ARGB_8888)
                     )
                 }
 
@@ -658,7 +673,9 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
                     startTrimMs = startTrimMs,
                     endTrimMs = endTrimMs,
                     speedMultiplier = currentSpeed,
-                    layers = layers
+                    layers = layers,
+                    canvasWidth = videoWidth,
+                    canvasHeight = videoHeight
                 )
 
                 if (saveResult.isFailure) {
@@ -704,6 +721,9 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
 
     override fun onSurfaceTextureSizeChanged(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
         adjustTextureViewSize(videoWidth, videoHeight)
+        if (videoWidth > 0 && videoHeight > 0) {
+            binding.zoomableView.resetTransformToFit(videoWidth.toFloat(), videoHeight.toFloat())
+        }
     }
 
     override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {

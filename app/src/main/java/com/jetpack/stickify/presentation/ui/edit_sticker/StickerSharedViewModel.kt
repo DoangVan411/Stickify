@@ -15,6 +15,7 @@ import com.jetpack.stickify.domain.model.BorderStyle
 import com.jetpack.stickify.domain.model.Layer
 import com.jetpack.stickify.domain.model.Playback
 import com.jetpack.stickify.domain.model.StickerAnimationType
+import com.jetpack.stickify.domain.model.StickerProject
 import com.jetpack.stickify.domain.model.StickerStyle
 import com.jetpack.stickify.domain.model.SubjectLayer
 import com.jetpack.stickify.domain.model.SubjectStyle
@@ -22,7 +23,6 @@ import com.jetpack.stickify.domain.usecase.ApplyBorderUseCase
 import com.jetpack.stickify.domain.usecase.ExportGifUseCase
 import com.jetpack.stickify.domain.usecase.ProcessStickerUseCase
 import com.jetpack.stickify.domain.usecase.SaveStickerUseCase
-import com.jetpack.stickify.domain.model.StickerProject
 import com.jetpack.stickify.presentation.ui.edit_gif.GifProjectHandler
 import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorModel
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -30,7 +30,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject
@@ -282,7 +281,9 @@ class StickerSharedViewModel @Inject constructor(
         endTrimMs: Long = 8000L,
         speedMultiplier: Float = 1.0f,
         customName: String? = null,
-        layers: List<Layer> = emptyList()
+        layers: List<Layer> = emptyList(),
+        canvasWidth: Int = 0,
+        canvasHeight: Int = 0
     ): Result<StickerProject> {
         return gifProjectHandler.saveGifProject(
             projectId = projectId,
@@ -294,7 +295,9 @@ class StickerSharedViewModel @Inject constructor(
             endTrimMs = endTrimMs,
             speedMultiplier = speedMultiplier,
             customName = customName,
-            layers = layers
+            layers = layers,
+            canvasWidth = canvasWidth,
+            canvasHeight = canvasHeight
         )
     }
 

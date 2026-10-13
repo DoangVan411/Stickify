@@ -28,7 +28,7 @@ enum class RecentAction {
  * Binding dữ liệu thumbnailPath, name, updatedAt và gửi projectId qua onItemClick.
  */
 class RecentProjectAdapter(
-    private val onItemClick: (projectId: String) -> Unit = {},
+    private val onItemClick: (project: ProjectEntity) -> Unit = {},
     private val onActionClick: (project: ProjectEntity, action: RecentAction) -> Unit = { _, _ -> }
 ) : ListAdapter<ProjectEntity, RecentProjectAdapter.ViewHolder>(DiffCallback()) {
 
@@ -108,7 +108,7 @@ class RecentProjectAdapter(
             ivMore.setOnClickListener { view ->
                 showPopupMenu(view, project)
             }
-            itemView.setOnClickListener { onItemClick(project.id) }
+            itemView.setOnClickListener { onItemClick(project) }
         }
 
         private fun showPopupMenu(anchorView: View, project: ProjectEntity) {

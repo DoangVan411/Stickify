@@ -12,10 +12,10 @@ data class SubjectLayer(
     override val visible: Boolean = true,
     val source: AssetRef,
     val mediaKind: MediaKind = MediaKind.IMAGE,
-    val cutoutPath: String = "",
-    val cartoonCorePath: String = "",
+    val cutoutPath: String? = "",
+    val cartoonCorePath: String? = "",
     val style: SubjectStyle = SubjectStyle.ORIGINAL,
-    val styledPath: String = "",
+    val styledPath: String? = "",
     val strokeColorArgb: Int = 0,
     val strokeWidthRatio: Float = 0f,
     val isTemplatePlaceholder: Boolean = false

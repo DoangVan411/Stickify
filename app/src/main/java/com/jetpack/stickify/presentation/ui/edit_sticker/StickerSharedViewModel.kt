@@ -12,8 +12,10 @@ import androidx.lifecycle.viewModelScope
 import com.jetpack.stickify.data.processor.StickerStyleProcessor
 import com.jetpack.stickify.data.source.local.AssetLoader
 import com.jetpack.stickify.domain.model.BorderStyle
+import com.jetpack.stickify.domain.model.Layer
 import com.jetpack.stickify.domain.model.Playback
 import com.jetpack.stickify.domain.model.StickerAnimationType
+import com.jetpack.stickify.domain.model.StickerProject
 import com.jetpack.stickify.domain.model.StickerStyle
 import com.jetpack.stickify.domain.model.SubjectLayer
 import com.jetpack.stickify.domain.model.SubjectStyle
@@ -21,13 +23,13 @@ import com.jetpack.stickify.domain.usecase.ApplyBorderUseCase
 import com.jetpack.stickify.domain.usecase.ExportGifUseCase
 import com.jetpack.stickify.domain.usecase.ProcessStickerUseCase
 import com.jetpack.stickify.domain.usecase.SaveStickerUseCase
+import com.jetpack.stickify.presentation.ui.edit_gif.GifProjectHandler
 import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject
@@ -39,7 +41,8 @@ class StickerSharedViewModel @Inject constructor(
     private val saveStickerUseCase: SaveStickerUseCase,
     private val applyBorderUseCase: ApplyBorderUseCase,
     private val exportGifUseCase: ExportGifUseCase,
-    private val assetLoader: AssetLoader
+    val assetLoader: AssetLoader,
+    private val gifProjectHandler: GifProjectHandler
 ) : ViewModel() {
 
     private val _isLoading = MutableLiveData<Boolean>()
@@ -153,8 +156,9 @@ class StickerSharedViewModel @Inject constructor(
         _isLoading.value = true
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val cutoutFile = if (subjectLayer.cutoutPath.isNotBlank()) {
-                    File(context.filesDir, subjectLayer.cutoutPath)
+                val cutoutPath = subjectLayer.cutoutPath
+                val cutoutFile = if (!cutoutPath.isNullOrBlank()) {
+                    File(context.filesDir, cutoutPath)
                 } else null
 
                 val originalCore: Bitmap? = if (cutoutFile != null && cutoutFile.exists()) {
@@ -168,8 +172,9 @@ class StickerSharedViewModel @Inject constructor(
                     return@launch
                 }
 
-                val cartoonFile = if (subjectLayer.cartoonCorePath.isNotBlank()) {
-                    File(context.filesDir, subjectLayer.cartoonCorePath)
+                val cartoonPath = subjectLayer.cartoonCorePath
+                val cartoonFile = if (!cartoonPath.isNullOrBlank()) {
+                    File(context.filesDir, cartoonPath)
                 } else null
 
                 val cartoonCore: Bitmap = if (cartoonFile != null && cartoonFile.exists()) {
@@ -210,7 +215,8 @@ class StickerSharedViewModel @Inject constructor(
                     SubjectStyle.ORIGINAL -> StickerStyle.ORIGINAL
                 }
 
-                val styledFile = if (subjectLayer.styledPath.isNotBlank()) File(context.filesDir, subjectLayer.styledPath) else null
+                val styledPath = subjectLayer.styledPath
+                val styledFile = if (!styledPath.isNullOrBlank()) File(context.filesDir, styledPath) else null
                 if (styledFile != null && styledFile.exists()) {
                     val styledBmp = BitmapFactory.decodeFile(styledFile.absolutePath)
                     if (styledBmp != null) {
@@ -263,6 +269,40 @@ class StickerSharedViewModel @Inject constructor(
                 _isLoading.value = false
             }
         }
+    }
+
+    suspend fun saveGifProject(
+        projectId: String,
+        thumbBitmap: Bitmap?,
+        outputFile: File,
+        filesDir: File,
+        videoUri: String? = null,
+        startTrimMs: Long = 0L,
+        endTrimMs: Long = 8000L,
+        speedMultiplier: Float = 1.0f,
+        customName: String? = null,
+        layers: List<Layer> = emptyList(),
+        canvasWidth: Int = 0,
+        canvasHeight: Int = 0
+    ): Result<StickerProject> {
+        return gifProjectHandler.saveGifProject(
+            projectId = projectId,
+            thumbBitmap = thumbBitmap,
+            outputFile = outputFile,
+            filesDir = filesDir,
+            videoUri = videoUri,
+            startTrimMs = startTrimMs,
+            endTrimMs = endTrimMs,
+            speedMultiplier = speedMultiplier,
+            customName = customName,
+            layers = layers,
+            canvasWidth = canvasWidth,
+            canvasHeight = canvasHeight
+        )
+    }
+
+    suspend fun loadGifProject(projectId: String): Result<StickerProject?> {
+        return gifProjectHandler.getProjectById(projectId)
     }
 
     fun selectStyle(style: StickerStyle, addToHistory: Boolean = true) {

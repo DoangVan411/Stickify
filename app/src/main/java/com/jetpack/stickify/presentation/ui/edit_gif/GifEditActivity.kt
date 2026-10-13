@@ -29,7 +29,9 @@ import androidx.lifecycle.lifecycleScope
 import com.jetpack.stickify.R
 import com.jetpack.stickify.data.gif.AnimatedGifEncoder
 import com.jetpack.stickify.databinding.ActivityGifEditBinding
+import com.jetpack.stickify.domain.model.Layer
 import com.jetpack.stickify.domain.model.TextAlign
+import com.jetpack.stickify.presentation.ui.edit_sticker.StickerPreviewActivity
 import com.jetpack.stickify.presentation.ui.edit_sticker.StickerSharedViewModel
 import com.jetpack.stickify.presentation.ui.edit_sticker.cancel.SaveConfirmDialogFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.custom_view.EditorPanelView
@@ -65,6 +67,8 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
         const val EXTRA_START_MS = "extra_start_ms"
         const val EXTRA_END_MS = "extra_end_ms"
         const val EXTRA_RESULT_GIF_URI = "extra_result_gif_uri"
+        const val EXTRA_PROJECT_ID = "extra_project_id"
+        const val EXTRA_SPEED = "extra_speed"
     }
 
     private lateinit var binding: ActivityGifEditBinding
@@ -81,6 +85,8 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
     private var videoWidth = 0
     private var videoHeight = 0
     private var currentSpeed = 1.0f
+    private var currentProjectId: String? = null
+    private var pendingLayersToRestore: List<Layer>? = null
 
     private var playbackLoopJob: Job? = null
     private var decorToolFragment: DecorToolFragment? = null
@@ -96,6 +102,11 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
         videoUri = uriExtra ?: uriString?.let { Uri.parse(it) }
         startTrimMs = intent.getLongExtra(EXTRA_START_MS, 0L)
         endTrimMs = intent.getLongExtra(EXTRA_END_MS, 8000L)
+        currentProjectId = intent.getStringExtra(EXTRA_PROJECT_ID)
+        val speedExtra = intent.getFloatExtra(EXTRA_SPEED, 1.0f)
+        if (speedExtra > 0f) {
+            currentSpeed = speedExtra
+        }
 
         if (videoUri == null) {
             Toast.makeText(this, "Không tìm thấy video đầu vào", Toast.LENGTH_SHORT).show()
@@ -110,17 +121,40 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
         setupEditorTabs()
         setupSpeedControls()
         setupBackPressHandler()
+        setupSaveConfirmDialogListener()
+
+        if (!currentProjectId.isNullOrBlank()) {
+            lifecycleScope.launch {
+                val result = sharedViewModel.loadGifProject(currentProjectId!!)
+                val project = result.getOrNull()
+                if (project != null) {
+                    pendingLayersToRestore = project.content.layers
+                    restoreLayersIfPending()
+                }
+            }
+        }
     }
 
     private fun setupCanvas() {
         binding.textureView.surfaceTextureListener = this
-        // Canvas ZoomableStickerView làm lớp phủ trong suốt trên video
+        // Canvas ZoomableStickerView làm lớp phủ trong suốt trên video, cố định canvas bám sát video
         binding.zoomableView.showCheckerBackground = false
+        binding.zoomableView.allowCanvasTransform = false
 
         binding.zoomableView.onHistoryChanged = { canUndo, canRedo ->
             updateUndoRedoButtons(canUndo, canRedo)
         }
         updateUndoRedoButtons(canUndo = false, canRedo = false)
+    }
+
+    private fun restoreLayersIfPending() {
+        val layers = pendingLayersToRestore ?: return
+        if (videoWidth > 0 && videoHeight > 0) {
+            lifecycleScope.launch {
+                binding.zoomableView.restoreDecorLayers(layers, sharedViewModel.assetLoader)
+                pendingLayersToRestore = null
+            }
+        }
     }
 
     private fun updateUndoRedoButtons(canUndo: Boolean, canRedo: Boolean) {
@@ -156,10 +190,95 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
             .show(supportFragmentManager, SaveConfirmDialogFragment.TAG)
     }
 
+    private fun setupSaveConfirmDialogListener() {
+        supportFragmentManager.setFragmentResultListener(
+            SaveConfirmDialogFragment.REQUEST_KEY,
+            this
+        ) { _, bundle ->
+            when (bundle.getString(SaveConfirmDialogFragment.EXTRA_ACTION)) {
+                SaveConfirmDialogFragment.ACTION_SAVE -> {
+                    handleSaveProjectAction()
+                }
+                SaveConfirmDialogFragment.ACTION_DISCARD -> {
+                    finish()
+                }
+                SaveConfirmDialogFragment.ACTION_CANCEL -> {
+                    // Tiếp tục chỉnh sửa
+                }
+            }
+        }
+    }
+
+    private fun handleSaveProjectAction() {
+        val uri = videoUri ?: run { finish(); return }
+        val finalProjectId = currentProjectId ?: "proj_gif_${System.currentTimeMillis()}".also { currentProjectId = it }
+        binding.progressBar.visibility = View.VISIBLE
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val stickersDir = File(filesDir, "stickers").apply { if (!exists()) mkdirs() }
+                val outputFile = File(stickersDir, "gif_${System.currentTimeMillis()}.gif")
+                if (!outputFile.exists()) {
+                    outputFile.createNewFile()
+                }
+
+                val layers = withContext(Dispatchers.Main) {
+                    binding.zoomableView.exportDecorLayers(finalProjectId, filesDir)
+                }
+
+                val maxDim = 400f
+                val thumbScale = if (videoWidth > 0 && videoHeight > 0) {
+                    min(maxDim / videoWidth, maxDim / videoHeight)
+                } else 1f
+                val thumbW = if (videoWidth > 0) (videoWidth * thumbScale).toInt().coerceAtLeast(1) else 400
+                val thumbH = if (videoHeight > 0) (videoHeight * thumbScale).toInt().coerceAtLeast(1) else 400
+
+                val thumbBitmap = withContext(Dispatchers.Main) {
+                    binding.zoomableView.renderCompositeBitmap(
+                        Bitmap.createBitmap(
+                            thumbW,
+                            thumbH,
+                            Bitmap.Config.ARGB_8888
+                        )
+                    )
+                }
+
+                val saveResult = sharedViewModel.saveGifProject(
+                    projectId = finalProjectId,
+                    thumbBitmap = thumbBitmap,
+                    outputFile = outputFile,
+                    filesDir = filesDir,
+                    videoUri = uri.toString(),
+                    startTrimMs = startTrimMs,
+                    endTrimMs = endTrimMs,
+                    speedMultiplier = currentSpeed,
+                    layers = layers,
+                    canvasWidth = videoWidth,
+                    canvasHeight = videoHeight
+                )
+
+                withContext(Dispatchers.Main) {
+                    binding.progressBar.visibility = View.GONE
+                    if (saveResult.isSuccess) {
+                        Toast.makeText(this@GifEditActivity, "Đã lưu dự án", Toast.LENGTH_SHORT).show()
+                    }
+                    finish()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    binding.progressBar.visibility = View.GONE
+                    Toast.makeText(this@GifEditActivity, "Lỗi lưu dự án: ${e.message}", Toast.LENGTH_SHORT).show()
+                    finish()
+                }
+            }
+        }
+    }
+
     private fun setupObservers() {
         // Nhận sự kiện thêm Decor từ DecorToolFragment
         sharedViewModel.addedDecorEvent.observe(this) { decor ->
             if (decor != null) {
+                if (videoWidth <= 0 || videoHeight <= 0) return@observe
                 binding.zoomableView.setDrawDecorBrush(null)
                 val bitmap = decor.customBitmap ?: BitmapFactory.decodeResource(resources, decor.resId)
                 if (bitmap != null) {
@@ -173,6 +292,7 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
             if (decor == null) {
                 binding.zoomableView.setDrawDecorBrush(null)
             } else {
+                if (videoWidth <= 0 || videoHeight <= 0) return@observe
                 val bitmap = decor.customBitmap ?: runCatching {
                     BitmapFactory.decodeResource(resources, decor.resId)
                 }.getOrNull() ?: ContextCompat.getDrawable(this, decor.resId)?.toBitmap()
@@ -184,6 +304,7 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
     private fun setupTextOverlay() {
         textController = TextInputOverlayController(binding.addTextLayout) { result ->
             if (result != null) {
+                if (videoWidth <= 0 || videoHeight <= 0) return@TextInputOverlayController
                 binding.zoomableView.addTextItem(
                     text = result.text,
                     textColor = result.colorArgb,
@@ -345,22 +466,40 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
         binding.progressBar.visibility = View.VISIBLE
         mediaPlayer?.release()
         try {
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(this@GifEditActivity, uri)
+            val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            val metaW = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+            val metaH = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+            retriever.release()
+
             val player = MediaPlayer().apply {
                 setDataSource(this@GifEditActivity, uri)
                 setSurface(surface)
                 isLooping = false
                 setOnPreparedListener { mp ->
                     binding.progressBar.visibility = View.GONE
-                    this@GifEditActivity.videoWidth = mp.videoWidth
-                    this@GifEditActivity.videoHeight = mp.videoHeight
+                    val rawW = if (metaW > 0) metaW else mp.videoWidth
+                    val rawH = if (metaH > 0) metaH else mp.videoHeight
 
-                    adjustTextureViewSize(this@GifEditActivity.videoWidth, this@GifEditActivity.videoHeight)
-                    setupZoomableBaseSize(this@GifEditActivity.videoWidth, this@GifEditActivity.videoHeight)
+                    val (realW, realH) = if (rotation == 90 || rotation == 270) {
+                        rawH to rawW
+                    } else {
+                        rawW to rawH
+                    }
+
+                    this@GifEditActivity.videoWidth = realW
+                    this@GifEditActivity.videoHeight = realH
+
+                    adjustTextureViewSize(realW, realH)
+                    setupZoomableBaseSize(realW, realH)
 
                     applyPlaybackSpeed(currentSpeed)
                     mp.seekTo(startTrimMs.toInt())
                     mp.start()
                     startPlaybackLoopMonitor()
+
+                    restoreLayersIfPending()
                 }
                 setOnErrorListener { _, _, _ ->
                     binding.progressBar.visibility = View.GONE
@@ -379,6 +518,13 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
         if (w <= 0 || h <= 0) return
         val transparentBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         binding.zoomableView.setBitmap(transparentBitmap, animate = false)
+        if (binding.zoomableView.width > 0 && binding.zoomableView.height > 0) {
+            binding.zoomableView.resetTransformToFit(w.toFloat(), h.toFloat())
+        } else {
+            binding.zoomableView.post {
+                binding.zoomableView.resetTransformToFit(w.toFloat(), h.toFloat())
+            }
+        }
     }
 
     private fun adjustTextureViewSize(videoW: Int, videoH: Int) {
@@ -432,6 +578,14 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
             val retriever = MediaMetadataRetriever()
             try {
                 retriever.setDataSource(this@GifEditActivity, uri)
+                val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+                val metaW = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+                val metaH = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+                val (realW, realH) = if (rotation == 90 || rotation == 270) {
+                    (if (metaH > 0) metaH else videoHeight) to (if (metaW > 0) metaW else videoWidth)
+                } else {
+                    (if (metaW > 0) metaW else videoWidth) to (if (metaH > 0) metaH else videoHeight)
+                }
 
                 // Cấu hình số frame xuất ảnh: ~10 fps, tối đa 40 frame
                 val frameRateFps = 10
@@ -439,27 +593,49 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
                 val frameIntervalUs = (durationMs * 1000L) / totalFrames
                 val frameDelayMs = (1000 / (frameRateFps * currentSpeed)).toInt().coerceAtLeast(30)
 
-                val outputFile = File(cacheDir, "stickify_gif_${System.currentTimeMillis()}.gif")
+                val projectId = "proj_gif_${System.currentTimeMillis()}"
+                val stickersDir = File(filesDir, "stickers").apply { if (!exists()) mkdirs() }
+                val outputFile = File(stickersDir, "gif_${System.currentTimeMillis()}.gif")
                 val fos = FileOutputStream(outputFile)
                 val encoder = AnimatedGifEncoder()
                 encoder.start(fos)
                 encoder.setDelay(frameDelayMs)
                 encoder.setRepeat(0) // Lặp vô hạn
 
+                var firstFrameComposite: Bitmap? = null
+
                 for (i in 0 until totalFrames) {
                     val timeUs = (startTrimMs * 1000L) + i * frameIntervalUs
                     val rawFrame = retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST)
                     if (rawFrame != null) {
+                        val orientedFrame = if ((rotation == 90 || rotation == 270) && rawFrame.width > rawFrame.height && realW < realH) {
+                            val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
+                            Bitmap.createBitmap(rawFrame, 0, 0, rawFrame.width, rawFrame.height, matrix, true)
+                        } else if (rotation == 180) {
+                            val matrix = Matrix().apply { postRotate(180f) }
+                            Bitmap.createBitmap(rawFrame, 0, 0, rawFrame.width, rawFrame.height, matrix, true)
+                        } else {
+                            rawFrame
+                        }
+
                         // Thu nhỏ frame để xuất GIF nhanh và dung lượng nhẹ (~400px)
                         val maxDim = 400
-                        val scale = min(maxDim.toFloat() / rawFrame.width, maxDim.toFloat() / rawFrame.height)
-                        val targetW = (rawFrame.width * scale).toInt().coerceAtLeast(1)
-                        val targetH = (rawFrame.height * scale).toInt().coerceAtLeast(1)
-                        val scaledFrame = Bitmap.createScaledBitmap(rawFrame, targetW, targetH, true)
+                        val scale = min(maxDim.toFloat() / orientedFrame.width, maxDim.toFloat() / orientedFrame.height)
+                        val targetW = (orientedFrame.width * scale).toInt().coerceAtLeast(1)
+                        val targetH = (orientedFrame.height * scale).toInt().coerceAtLeast(1)
+                        val scaledFrame = Bitmap.createScaledBitmap(orientedFrame, targetW, targetH, true)
+
+                        if (orientedFrame !== rawFrame) {
+                            orientedFrame.recycle()
+                        }
 
                         // Ghép toàn bộ decor/chữ/vẽ cọ lên từng frame
                         val compositeBitmap = withContext(Dispatchers.Main) {
                             binding.zoomableView.renderCompositeBitmap(scaledFrame)
+                        }
+
+                        if (firstFrameComposite == null) {
+                            firstFrameComposite = compositeBitmap
                         }
 
                         encoder.addFrame(compositeBitmap)
@@ -468,14 +644,59 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
                 encoder.finish()
                 fos.close()
 
+                // Chuẩn bị thumbnail cho project
+                val thumbBitmap = firstFrameComposite ?: withContext(Dispatchers.Main) {
+                    val maxDim = 400f
+                    val thumbScale = if (videoWidth > 0 && videoHeight > 0) {
+                        min(maxDim / videoWidth, maxDim / videoHeight)
+                    } else 1f
+                    val thumbW = if (videoWidth > 0) (videoWidth * thumbScale).toInt().coerceAtLeast(1) else 400
+                    val thumbH = if (videoHeight > 0) (videoHeight * thumbScale).toInt().coerceAtLeast(1) else 400
+                    binding.zoomableView.renderCompositeBitmap(
+                        Bitmap.createBitmap(thumbW, thumbH, Bitmap.Config.ARGB_8888)
+                    )
+                }
+
+                val finalProjectId = currentProjectId ?: projectId
+
+                val layers = withContext(Dispatchers.Main) {
+                    binding.zoomableView.exportDecorLayers(finalProjectId, filesDir)
+                }
+
+                // Lưu dự án GIF qua StickerSharedViewModel -> GifProjectHandler -> SaveProjectUseCase
+                val saveResult = sharedViewModel.saveGifProject(
+                    projectId = finalProjectId,
+                    thumbBitmap = thumbBitmap,
+                    outputFile = outputFile,
+                    filesDir = filesDir,
+                    videoUri = uri.toString(),
+                    startTrimMs = startTrimMs,
+                    endTrimMs = endTrimMs,
+                    speedMultiplier = currentSpeed,
+                    layers = layers,
+                    canvasWidth = videoWidth,
+                    canvasHeight = videoHeight
+                )
+
+                if (saveResult.isFailure) {
+                    throw saveResult.exceptionOrNull() ?: Exception("Không thể lưu dự án GIF")
+                }
+
+                val fileUri = Uri.fromFile(outputFile)
+
                 withContext(Dispatchers.Main) {
                     binding.progressBar.visibility = View.GONE
                     binding.btnCreate.isEnabled = true
                     Toast.makeText(this@GifEditActivity, getString(R.string.gif_exported_success), Toast.LENGTH_SHORT).show()
-                    val resultIntent = Intent().apply {
-                        putExtra(EXTRA_RESULT_GIF_URI, Uri.fromFile(outputFile).toString())
+
+                    val previewIntent = Intent(this@GifEditActivity, StickerPreviewActivity::class.java).apply {
+                        data = fileUri
+                        putExtra(StickerPreviewActivity.EXTRA_STICKER_URI, fileUri)
+                        putExtra(StickerPreviewActivity.EXTRA_PROJECT_ID, finalProjectId)
+                        putExtra(StickerPreviewActivity.EXTRA_IS_ANIMATED, true)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
-                    setResult(RESULT_OK, resultIntent)
+                    startActivity(previewIntent)
                     finish()
                 }
             } catch (e: Exception) {
@@ -500,6 +721,9 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
 
     override fun onSurfaceTextureSizeChanged(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
         adjustTextureViewSize(videoWidth, videoHeight)
+        if (videoWidth > 0 && videoHeight > 0) {
+            binding.zoomableView.resetTransformToFit(videoWidth.toFloat(), videoHeight.toFloat())
+        }
     }
 
     override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {

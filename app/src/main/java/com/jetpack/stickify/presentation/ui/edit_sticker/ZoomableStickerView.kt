@@ -445,13 +445,68 @@ class ZoomableStickerView @JvmOverloads constructor(
         val scaleX = baseBitmap.width.toFloat() / bw
         val scaleY = baseBitmap.height.toFloat() / bh
 
-        for (decor in decorItems) {
+        val validItems = decorItems.filter { !it.bitmap.isRecycled }
+        if (validItems.isEmpty()) return baseBitmap
+
+        var minX = Float.MAX_VALUE
+        var minY = Float.MAX_VALUE
+        var maxX = -Float.MAX_VALUE
+        var maxY = -Float.MAX_VALUE
+
+        for (decor in validItems) {
+            val dw = decor.width * decor.scale * scaleX
+            val dh = decor.height * decor.scale * scaleY
+            val cx = decor.x * scaleX
+            val cy = decor.y * scaleY
+            val left = cx - dw / 2f
+            val top = cy - dh / 2f
+            val right = cx + dw / 2f
+            val bottom = cy + dh / 2f
+
+            if (left < minX) minX = left
+            if (top < minY) minY = top
+            if (right > maxX) maxX = right
+            if (bottom > maxY) maxY = bottom
+        }
+
+        val targetW = baseBitmap.width.toFloat()
+        val targetH = baseBitmap.height.toFloat()
+        val padding = 16f
+        val contentW = (maxX - minX).coerceAtLeast(1f)
+        val contentH = (maxY - minY).coerceAtLeast(1f)
+
+        val fitScale = if (minX < 0f || minY < 0f || maxX > targetW || maxY > targetH) {
+            val availW = (targetW - 2 * padding).coerceAtLeast(1f)
+            val availH = (targetH - 2 * padding).coerceAtLeast(1f)
+            kotlin.math.min(availW / contentW, availH / contentH).coerceAtMost(1f)
+        } else {
+            1f
+        }
+
+        val centerX = (minX + maxX) / 2f
+        val centerY = (minY + maxY) / 2f
+
+        val transX = if (fitScale < 1f || minX < 0f || minY < 0f || maxX > targetW || maxY > targetH) {
+            targetW / 2f - centerX * fitScale
+        } else {
+            0f
+        }
+
+        val transY = if (fitScale < 1f || minX < 0f || minY < 0f || maxX > targetW || maxY > targetH) {
+            targetH / 2f - centerY * fitScale
+        } else {
+            0f
+        }
+
+        for (decor in validItems) {
             canvas.save()
-            canvas.translate(decor.x * scaleX, decor.y * scaleY)
+            val cx = (decor.x * scaleX) * fitScale + transX
+            val cy = (decor.y * scaleY) * fitScale + transY
+            canvas.translate(cx, cy)
             canvas.rotate(decor.rotation)
-            val w = decor.width * decor.scale * scaleX
-            val h = decor.height * decor.scale * scaleY
-            val rect = android.graphics.RectF(-w / 2f, -h / 2f, w / 2f, h / 2f)
+            val w = decor.width * decor.scale * scaleX * fitScale
+            val h = decor.height * decor.scale * scaleY * fitScale
+            val rect = RectF(-w / 2f, -h / 2f, w / 2f, h / 2f)
             canvas.drawBitmap(decor.bitmap, null, rect, paint)
             canvas.restore()
         }
@@ -688,21 +743,93 @@ class ZoomableStickerView @JvmOverloads constructor(
         val content = projectContent ?: return null
         val w = content.canvas.width.takeIf { it > 0 } ?: 512
         val h = content.canvas.height.takeIf { it > 0 } ?: 512
-        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val c = Canvas(bmp)
-        for (layer in content.layers) {
-            if (layer.visible && layer !is DecorationLayer && layer !is TextLayer && layer !is SubjectLayer) drawLayer(c, layer)
+
+        val validItems = decorItems.filter {
+            val bmp = currentBitmapFor(it, frameIdx)
+            !bmp.isRecycled
         }
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-        for (decor in decorItems) {
-            c.save()
-            c.translate(decor.x, decor.y)
-            c.rotate(decor.rotation)
+
+        if (validItems.isEmpty()) {
+            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val c = Canvas(bmp)
+            for (layer in content.layers) {
+                if (layer.visible && layer !is DecorationLayer && layer !is TextLayer && layer !is SubjectLayer) drawLayer(c, layer)
+            }
+            return bmp
+        }
+
+        // Tính toán Bounding Box cho toàn bộ decorItems trên canvas
+        var minX = Float.MAX_VALUE
+        var minY = Float.MAX_VALUE
+        var maxX = -Float.MAX_VALUE
+        var maxY = -Float.MAX_VALUE
+
+        for (decor in validItems) {
             val dw = decor.width * decor.scale
             val dh = decor.height * decor.scale
-            c.drawBitmap(currentBitmapFor(decor, frameIdx), null, RectF(-dw / 2f, -dh / 2f, dw / 2f, dh / 2f), paint)
+            val left = decor.x - dw / 2f
+            val top = decor.y - dh / 2f
+            val right = decor.x + dw / 2f
+            val bottom = decor.y + dh / 2f
+
+            if (left < minX) minX = left
+            if (top < minY) minY = top
+            if (right > maxX) maxX = right
+            if (bottom > maxY) maxY = bottom
+        }
+
+        val padding = 16f
+        val contentW = (maxX - minX).coerceAtLeast(1f)
+        val contentH = (maxY - minY).coerceAtLeast(1f)
+
+        val fitScale = if (minX < 0f || minY < 0f || maxX > w || maxY > h) {
+            val availW = (w - 2 * padding).coerceAtLeast(1f)
+            val availH = (h - 2 * padding).coerceAtLeast(1f)
+            kotlin.math.min(availW / contentW, availH / contentH).coerceAtMost(1f)
+        } else {
+            1f
+        }
+
+        val centerX = (minX + maxX) / 2f
+        val centerY = (minY + maxY) / 2f
+
+        val transX = if (fitScale < 1f || minX < 0f || minY < 0f || maxX > w || maxY > h) {
+            w / 2f - centerX * fitScale
+        } else {
+            0f
+        }
+
+        val transY = if (fitScale < 1f || minX < 0f || minY < 0f || maxX > w || maxY > h) {
+            h / 2f - centerY * fitScale
+        } else {
+            0f
+        }
+
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+
+        for (layer in content.layers) {
+            if (layer.visible && layer !is DecorationLayer && layer !is TextLayer && layer !is SubjectLayer) {
+                drawLayer(c, layer)
+            }
+        }
+
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        for (decor in validItems) {
+            c.save()
+            val cx = decor.x * fitScale + transX
+            val cy = decor.y * fitScale + transY
+            c.translate(cx, cy)
+            c.rotate(decor.rotation)
+            val dw = decor.width * decor.scale * fitScale
+            val dh = decor.height * decor.scale * fitScale
+            val decorBmp = currentBitmapFor(decor, frameIdx)
+            if (!decorBmp.isRecycled) {
+                c.drawBitmap(decorBmp, null, RectF(-dw / 2f, -dh / 2f, dw / 2f, dh / 2f), paint)
+            }
             c.restore()
         }
+
         return bmp
     }
 

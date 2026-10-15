@@ -27,6 +27,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import com.jetpack.stickify.R
 import com.jetpack.stickify.data.gif.StickerAnimationRenderer
+import java.util.UUID
 
 class ZoomableStickerView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
@@ -195,8 +196,8 @@ class ZoomableStickerView @JvmOverloads constructor(
     var onLayerDeleted: ((String) -> Unit)? = null
     /** Người dùng bấm nhân bản: (sourceId, newId, cx, cy). */
     var onLayerDuplicated: ((String, String, Float, Float) -> Unit)? = null
-    /** Kết thúc 1 nét vẽ brush: (bitmap brush, danh sách con dấu). */
-    var onDecorStampsCommitted: ((Bitmap, List<StampSpec>) -> Unit)? = null
+    /** Kết thúc 1 nét vẽ brush: (bitmap brush, assetRef, danh sách con dấu). */
+    var onDecorStampsCommitted: ((Bitmap, AssetRef?, List<StampSpec>) -> Unit)? = null
 
     private var gestureSnapshot: FloatArray? = null
     private var pendingSelectId: String? = null
@@ -216,6 +217,7 @@ class ZoomableStickerView @JvmOverloads constructor(
     private data class DrawDecorBrush(
         val id: String,
         val bitmap: Bitmap,
+        val assetRef: AssetRef? = null,
         val widthRatio: Float = 0.18f,
         val minScaleRatio: Float = 0.85f,
         val maxScaleRatio: Float = 1.25f
@@ -374,8 +376,18 @@ class ZoomableStickerView @JvmOverloads constructor(
         return true
     }
 
-    fun addDecorBitmap(bitmap: Bitmap, id: String = java.util.UUID.randomUUID().toString()) {
+    var maxDecorLimit: Int = 40
+    var onMaxDecorLimitReached: (() -> Unit)? = null
+
+    fun getDecorCount(): Int = decorItems.size
+    fun isMaxDecorLimitReached(): Boolean = decorItems.size >= maxDecorLimit
+
+    fun addDecorBitmap(bitmap: Bitmap, id: String = UUID.randomUUID().toString()) {
         if (!hasContent()) return
+        if (decorItems.size >= maxDecorLimit) {
+            onMaxDecorLimitReached?.invoke()
+            return
+        }
         if (!isMatrixInitialized && width > 0 && height > 0) {
             resetTransformToFit(baseWidth(), baseHeight())
         }
@@ -393,8 +405,8 @@ class ZoomableStickerView @JvmOverloads constructor(
         notifyHistoryChanged()
     }
 
-    fun setDrawDecorBrush(bitmap: Bitmap?, id: String = java.util.UUID.randomUUID().toString()) {
-        drawDecorBrush = if (bitmap != null) DrawDecorBrush(id = id, bitmap = bitmap) else null
+    fun setDrawDecorBrush(bitmap: Bitmap?, id: String = UUID.randomUUID().toString(), assetRef: AssetRef? = null) {
+        drawDecorBrush = if (bitmap != null) DrawDecorBrush(id = id, bitmap = bitmap, assetRef = assetRef) else null
         selectedDecor = null
         isDraggingDecor = false
         isDraggingHandle = false
@@ -434,13 +446,68 @@ class ZoomableStickerView @JvmOverloads constructor(
         val scaleX = baseBitmap.width.toFloat() / bw
         val scaleY = baseBitmap.height.toFloat() / bh
 
-        for (decor in decorItems) {
+        val validItems = decorItems.filter { !it.bitmap.isRecycled }
+        if (validItems.isEmpty()) return baseBitmap
+
+        var minX = Float.MAX_VALUE
+        var minY = Float.MAX_VALUE
+        var maxX = -Float.MAX_VALUE
+        var maxY = -Float.MAX_VALUE
+
+        for (decor in validItems) {
+            val dw = decor.width * decor.scale * scaleX
+            val dh = decor.height * decor.scale * scaleY
+            val cx = decor.x * scaleX
+            val cy = decor.y * scaleY
+            val left = cx - dw / 2f
+            val top = cy - dh / 2f
+            val right = cx + dw / 2f
+            val bottom = cy + dh / 2f
+
+            if (left < minX) minX = left
+            if (top < minY) minY = top
+            if (right > maxX) maxX = right
+            if (bottom > maxY) maxY = bottom
+        }
+
+        val targetW = baseBitmap.width.toFloat()
+        val targetH = baseBitmap.height.toFloat()
+        val padding = 16f
+        val contentW = (maxX - minX).coerceAtLeast(1f)
+        val contentH = (maxY - minY).coerceAtLeast(1f)
+
+        val fitScale = if (minX < 0f || minY < 0f || maxX > targetW || maxY > targetH) {
+            val availW = (targetW - 2 * padding).coerceAtLeast(1f)
+            val availH = (targetH - 2 * padding).coerceAtLeast(1f)
+            kotlin.math.min(availW / contentW, availH / contentH).coerceAtMost(1f)
+        } else {
+            1f
+        }
+
+        val centerX = (minX + maxX) / 2f
+        val centerY = (minY + maxY) / 2f
+
+        val transX = if (fitScale < 1f || minX < 0f || minY < 0f || maxX > targetW || maxY > targetH) {
+            targetW / 2f - centerX * fitScale
+        } else {
+            0f
+        }
+
+        val transY = if (fitScale < 1f || minX < 0f || minY < 0f || maxX > targetW || maxY > targetH) {
+            targetH / 2f - centerY * fitScale
+        } else {
+            0f
+        }
+
+        for (decor in validItems) {
             canvas.save()
-            canvas.translate(decor.x * scaleX, decor.y * scaleY)
+            val cx = (decor.x * scaleX) * fitScale + transX
+            val cy = (decor.y * scaleY) * fitScale + transY
+            canvas.translate(cx, cy)
             canvas.rotate(decor.rotation)
-            val w = decor.width * decor.scale * scaleX
-            val h = decor.height * decor.scale * scaleY
-            val rect = android.graphics.RectF(-w / 2f, -h / 2f, w / 2f, h / 2f)
+            val w = decor.width * decor.scale * scaleX * fitScale
+            val h = decor.height * decor.scale * scaleY * fitScale
+            val rect = RectF(-w / 2f, -h / 2f, w / 2f, h / 2f)
             canvas.drawBitmap(decor.bitmap, null, rect, paint)
             canvas.restore()
         }
@@ -677,21 +744,93 @@ class ZoomableStickerView @JvmOverloads constructor(
         val content = projectContent ?: return null
         val w = content.canvas.width.takeIf { it > 0 } ?: 512
         val h = content.canvas.height.takeIf { it > 0 } ?: 512
-        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val c = Canvas(bmp)
-        for (layer in content.layers) {
-            if (layer.visible && layer !is DecorationLayer && layer !is TextLayer && layer !is SubjectLayer) drawLayer(c, layer)
+
+        val validItems = decorItems.filter {
+            val bmp = currentBitmapFor(it, frameIdx)
+            !bmp.isRecycled
         }
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-        for (decor in decorItems) {
-            c.save()
-            c.translate(decor.x, decor.y)
-            c.rotate(decor.rotation)
+
+        if (validItems.isEmpty()) {
+            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val c = Canvas(bmp)
+            for (layer in content.layers) {
+                if (layer.visible && layer !is DecorationLayer && layer !is TextLayer && layer !is SubjectLayer) drawLayer(c, layer)
+            }
+            return bmp
+        }
+
+        // Tính toán Bounding Box cho toàn bộ decorItems trên canvas
+        var minX = Float.MAX_VALUE
+        var minY = Float.MAX_VALUE
+        var maxX = -Float.MAX_VALUE
+        var maxY = -Float.MAX_VALUE
+
+        for (decor in validItems) {
             val dw = decor.width * decor.scale
             val dh = decor.height * decor.scale
-            c.drawBitmap(currentBitmapFor(decor, frameIdx), null, RectF(-dw / 2f, -dh / 2f, dw / 2f, dh / 2f), paint)
+            val left = decor.x - dw / 2f
+            val top = decor.y - dh / 2f
+            val right = decor.x + dw / 2f
+            val bottom = decor.y + dh / 2f
+
+            if (left < minX) minX = left
+            if (top < minY) minY = top
+            if (right > maxX) maxX = right
+            if (bottom > maxY) maxY = bottom
+        }
+
+        val padding = 16f
+        val contentW = (maxX - minX).coerceAtLeast(1f)
+        val contentH = (maxY - minY).coerceAtLeast(1f)
+
+        val fitScale = if (minX < 0f || minY < 0f || maxX > w || maxY > h) {
+            val availW = (w - 2 * padding).coerceAtLeast(1f)
+            val availH = (h - 2 * padding).coerceAtLeast(1f)
+            kotlin.math.min(availW / contentW, availH / contentH).coerceAtMost(1f)
+        } else {
+            1f
+        }
+
+        val centerX = (minX + maxX) / 2f
+        val centerY = (minY + maxY) / 2f
+
+        val transX = if (fitScale < 1f || minX < 0f || minY < 0f || maxX > w || maxY > h) {
+            w / 2f - centerX * fitScale
+        } else {
+            0f
+        }
+
+        val transY = if (fitScale < 1f || minX < 0f || minY < 0f || maxX > w || maxY > h) {
+            h / 2f - centerY * fitScale
+        } else {
+            0f
+        }
+
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+
+        for (layer in content.layers) {
+            if (layer.visible && layer !is DecorationLayer && layer !is TextLayer && layer !is SubjectLayer) {
+                drawLayer(c, layer)
+            }
+        }
+
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        for (decor in validItems) {
+            c.save()
+            val cx = decor.x * fitScale + transX
+            val cy = decor.y * fitScale + transY
+            c.translate(cx, cy)
+            c.rotate(decor.rotation)
+            val dw = decor.width * decor.scale * fitScale
+            val dh = decor.height * decor.scale * fitScale
+            val decorBmp = currentBitmapFor(decor, frameIdx)
+            if (!decorBmp.isRecycled) {
+                c.drawBitmap(decorBmp, null, RectF(-dw / 2f, -dh / 2f, dw / 2f, dh / 2f), paint)
+            }
             c.restore()
         }
+
         return bmp
     }
 
@@ -1255,6 +1394,10 @@ class ZoomableStickerView @JvmOverloads constructor(
     }
 
     private fun duplicateDecor(decor: DecorItemState) {
+        if (decorItems.size >= maxDecorLimit) {
+            onMaxDecorLimitReached?.invoke()
+            return
+        }
         val currentScale = currentMatrixScale().coerceAtLeast(0.01f)
         val offset = 24f * resources.displayMetrics.density / currentScale
         val duplicated = decor.copy(
@@ -1354,6 +1497,11 @@ class ZoomableStickerView @JvmOverloads constructor(
 
     private fun addDrawDecorAt(screenX: Float, screenY: Float): Boolean {
         val brush = drawDecorBrush ?: return false
+        if (decorItems.size >= maxDecorLimit) {
+            setDrawDecorBrush(null)
+            onMaxDecorLimitReached?.invoke()
+            return false
+        }
         val point = screenToCanvasPoint(screenX, screenY) ?: return false
         val randomScale = brush.minScaleRatio +
                 (brush.maxScaleRatio - brush.minScaleRatio) * kotlin.random.Random.nextFloat()
@@ -1654,7 +1802,7 @@ class ZoomableStickerView @JvmOverloads constructor(
                                 layerBitmaps[it.id] = it.bitmap
                                 StampSpec(it.id, it.x, it.y, it.width * it.scale / (cw * 0.45f))
                             }
-                            if (stamps.isNotEmpty()) onDecorStampsCommitted?.invoke(brush.bitmap, stamps)
+                            if (stamps.isNotEmpty()) onDecorStampsCommitted?.invoke(brush.bitmap, brush.assetRef, stamps)
                         } else {
                             drawStrokeHistory.add(currentDrawStrokeIds.toList())
                             preGestureSnapshot?.let {

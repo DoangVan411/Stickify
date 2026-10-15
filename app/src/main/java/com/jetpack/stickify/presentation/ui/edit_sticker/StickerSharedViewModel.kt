@@ -11,6 +11,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jetpack.stickify.data.processor.StickerStyleProcessor
 import com.jetpack.stickify.data.source.local.AssetLoader
+import com.jetpack.stickify.domain.model.AssetEntity
 import com.jetpack.stickify.domain.model.BorderStyle
 import com.jetpack.stickify.domain.model.Layer
 import com.jetpack.stickify.domain.model.Playback
@@ -21,6 +22,7 @@ import com.jetpack.stickify.domain.model.SubjectLayer
 import com.jetpack.stickify.domain.model.SubjectStyle
 import com.jetpack.stickify.domain.usecase.ApplyBorderUseCase
 import com.jetpack.stickify.domain.usecase.ExportGifUseCase
+import com.jetpack.stickify.domain.usecase.GetAssetsUseCase
 import com.jetpack.stickify.domain.usecase.ProcessStickerUseCase
 import com.jetpack.stickify.domain.usecase.SaveStickerUseCase
 import com.jetpack.stickify.presentation.ui.edit_gif.GifProjectHandler
@@ -42,7 +44,8 @@ class StickerSharedViewModel @Inject constructor(
     private val applyBorderUseCase: ApplyBorderUseCase,
     private val exportGifUseCase: ExportGifUseCase,
     val assetLoader: AssetLoader,
-    private val gifProjectHandler: GifProjectHandler
+    private val gifProjectHandler: GifProjectHandler,
+    private val getAssetsUseCase: GetAssetsUseCase
 ) : ViewModel() {
 
     private val _isLoading = MutableLiveData<Boolean>()
@@ -75,6 +78,13 @@ class StickerSharedViewModel @Inject constructor(
     val currentBorderDistance = MutableLiveData<Int>(20)
     val currentBorderColor = MutableLiveData<Int>(Color.WHITE)
 
+    // Assets từ Room DB
+    private val _decorationAssets = MutableLiveData<List<AssetEntity>>(emptyList())
+    val decorationAssets: LiveData<List<AssetEntity>> get() = _decorationAssets
+
+    private val _labelAssets = MutableLiveData<List<AssetEntity>>(emptyList())
+    val labelAssets: LiveData<List<AssetEntity>> get() = _labelAssets
+
     // Decor
     private val _decorList = MutableLiveData<List<DecorModel>>(emptyList())
     val decorList: LiveData<List<DecorModel>> get() = _decorList
@@ -86,8 +96,21 @@ class StickerSharedViewModel @Inject constructor(
 
     private var restoredProjectId: String? = null
 
-    fun addDecor(resId: Int, id: String = UUID.randomUUID().toString()) {
-        val newDecor = DecorModel(id = id, resId = resId)
+    fun loadAssets() {
+        viewModelScope.launch {
+            try {
+                val decResult = getAssetsUseCase.get("DECORATION")
+                val lblResult = getAssetsUseCase.get("LABEL")
+                _decorationAssets.value = decResult.getOrDefault(emptyList())
+                _labelAssets.value = lblResult.getOrDefault(emptyList())
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun addDecor(resId: Int = 0, path: String? = null, asset: AssetEntity? = null, bitmap: Bitmap? = null, id: String = UUID.randomUUID().toString()) {
+        val newDecor = DecorModel(id = id, resId = resId, path = path, asset = asset, customBitmap = bitmap)
         val current = _decorList.value.orEmpty().toMutableList()
         current.add(newDecor)
         _decorList.value = current
@@ -104,8 +127,12 @@ class StickerSharedViewModel @Inject constructor(
         _addedDecorEvent.value = newDecor
     }
 
-    fun selectDrawDecor(resId: Int) {
-        _drawDecorModeEvent.value = if (resId != 0) DecorModel(resId = resId) else null
+    fun selectDrawDecor(resId: Int = 0, path: String? = null, asset: AssetEntity? = null, bitmap: Bitmap? = null) {
+        _drawDecorModeEvent.value = if (resId != 0 || path != null || asset != null || bitmap != null) {
+            DecorModel(resId = resId, path = path, asset = asset, customBitmap = bitmap)
+        } else {
+            null
+        }
     }
 
     fun clearDrawDecor() {

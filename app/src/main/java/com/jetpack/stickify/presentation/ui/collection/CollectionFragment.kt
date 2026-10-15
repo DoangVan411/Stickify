@@ -181,7 +181,7 @@ class CollectionFragment : Fragment() {
                                 )
                                 dialog.show(childFragmentManager, CustomMessageDialogFragment.TAG)
                             } else {
-                                val dialog = CustomMessageDialogFragment.newInstance( "Thêm thành công","Đã mở WhatsApp cho ${pack.name}")
+                                val dialog = CustomMessageDialogFragment.newInstance( "Thêm thành công","Đã thêm ${pack.name} vào WhatsApp")
                                 dialog.show(childFragmentManager, CustomMessageDialogFragment.TAG)
                             }
                         }

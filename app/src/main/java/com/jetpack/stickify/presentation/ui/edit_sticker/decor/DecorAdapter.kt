@@ -5,15 +5,24 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
 import com.jetpack.stickify.R
 
 class DecorAdapter(
-    private val items: List<DecorItem>,
+    items: List<DecorItem>,
     private val isSelectable: Boolean = true,
     private val onItemClick: (DecorItem) -> Unit
 ) : RecyclerView.Adapter<DecorAdapter.ViewHolder>() {
 
+    private val itemsList: MutableList<DecorItem> = items.toMutableList()
     private var selectedPosition: Int = RecyclerView.NO_POSITION
+
+    fun updateItems(newItems: List<DecorItem>) {
+        itemsList.clear()
+        itemsList.addAll(newItems)
+        selectedPosition = RecyclerView.NO_POSITION
+        notifyDataSetChanged()
+    }
 
     fun setSelectedPosition(position: Int) {
         if (!isSelectable) return
@@ -37,7 +46,30 @@ class DecorAdapter(
         val selectedIndicator: View? = itemView.findViewById(R.id.selectedIndicator)
 
         fun bind(item: DecorItem, isSelected: Boolean) {
-            ivThumb.setImageResource(item.resId)
+            if (item.bitmap != null) {
+                ivThumb.setImageBitmap(item.bitmap)
+            } else if (item.resId != 0) {
+                ivThumb.setImageResource(item.resId)
+            } else if (!item.path.isNullOrEmpty()) {
+                val context = itemView.context
+                val resId = context.resources.getIdentifier(item.path, "drawable", context.packageName)
+                if (resId != 0) {
+                    ivThumb.setImageResource(resId)
+                } else {
+                    val glidePath = if (item.path.startsWith("file://") || item.path.startsWith("content://") || item.path.startsWith("/")) {
+                        item.path
+                    } else {
+                        "file:///android_asset/${item.path}"
+                    }
+                    Glide.with(context)
+                        .load(glidePath)
+                        .placeholder(R.drawable.ic_sticker_cat)
+                        .into(ivThumb)
+                }
+            } else {
+                ivThumb.setImageResource(R.drawable.ic_sticker_cat)
+            }
+
             selectedIndicator?.visibility = if (isSelectable && isSelected) View.VISIBLE else View.GONE
 
             itemView.setOnClickListener {
@@ -71,8 +103,8 @@ class DecorAdapter(
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.bind(items[position], isSelectable && position == selectedPosition)
+        holder.bind(itemsList[position], isSelectable && position == selectedPosition)
     }
 
-    override fun getItemCount(): Int = items.size
+    override fun getItemCount(): Int = itemsList.size
 }

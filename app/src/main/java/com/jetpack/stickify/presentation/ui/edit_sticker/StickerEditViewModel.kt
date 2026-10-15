@@ -83,10 +83,10 @@ class StickerEditViewModel @Inject constructor(
     // Danh sách nhãn (Labels / Stickers)
     private val _labelDecorations = MutableStateFlow(
         listOf(
-            BuiltinAsset("ic_sample_01.png", "pack_comic"),
-            BuiltinAsset("ic_sample_02.png", "pack_comic"),
-            BuiltinAsset("ic_sample_03.png", "pack_comic"),
-            BuiltinAsset("ic_sample_04.png", "pack_comic"),
+            BuiltinAsset("st_plant.png", "pack_comic"),
+            BuiltinAsset("st_star.png", "pack_comic"),
+            BuiltinAsset("st_universe.png", "pack_comic"),
+            BuiltinAsset("st_alien.png", "pack_comic"),
             BuiltinAsset("heart.png", "pack_more"),
             BuiltinAsset("img_decorate_01.png", "pack_more")
         )
@@ -485,14 +485,19 @@ class StickerEditViewModel @Inject constructor(
         }
     }
 
-    fun addStampLayers(context: Context, bitmap: Bitmap, stamps: List<ZoomableStickerView.StampSpec>) {
+    fun addStampLayers(context: Context, bitmap: Bitmap, assetRef: AssetRef?, stamps: List<ZoomableStickerView.StampSpec>) {
         if (stamps.isEmpty()) return
         val appContext = context.applicationContext
         viewModelScope.launch {
-            val rel = withContext(Dispatchers.IO) { saveDecorBitmap(appContext, bitmap) }
-            if (rel == null) {
-                _uiState.update { it.copy(error = "Không thể lưu decor") }
-                return@launch
+            val resolvedAssetRef = if (assetRef != null) {
+                assetRef
+            } else {
+                val rel = withContext(Dispatchers.IO) { saveDecorBitmap(appContext, bitmap) }
+                if (rel == null) {
+                    _uiState.update { it.copy(error = "Không thể lưu decor") }
+                    return@launch
+                }
+                CustomAsset(rel)
             }
             val session = _uiState.value.editorSession
             val start = session.history.undo.size
@@ -501,7 +506,7 @@ class StickerEditViewModel @Inject constructor(
                     id = st.id,
                     transform = Transform(cx = st.cx, cy = st.cy, scale = st.scale),
                     visible = true,
-                    asset = CustomAsset(rel),
+                    asset = resolvedAssetRef,
                     category = DecorationCategory.DRAWN
                 )
                 performInternal(session, AddLayerAction(layer = layer, index = session.content.layers.size))
@@ -774,6 +779,26 @@ class StickerEditViewModel @Inject constructor(
             transform = Transform(cx = 256f, cy = 256f, scale = 1f),
             visible = true,
             asset = asset,
+            category = category
+        )
+        val action = AddLayerAction(layer = newLayer, index = currentSession.content.layers.size)
+        performAction(action)
+        _uiState.update { it.copy(lastAddedLayerId = newLayerId) }
+    }
+
+    fun addBuiltinDecorationFromAsset(asset: AssetEntity, category: DecorationCategory = DecorationCategory.LABEL) {
+        val currentSession = _uiState.value.editorSession
+        val newLayerId = "layer_dec_${System.currentTimeMillis()}"
+        val parts = asset.path.split("/")
+        val packId = if (parts.size >= 2) parts[parts.size - 2] else "pack_default"
+        val assetId = parts.lastOrNull() ?: asset.path
+
+        val assetRef = BuiltinAsset(assetId = assetId, packId = packId)
+        val newLayer = DecorationLayer(
+            id = newLayerId,
+            transform = Transform(cx = 256f, cy = 256f, scale = 1f),
+            visible = true,
+            asset = assetRef,
             category = category
         )
         val action = AddLayerAction(layer = newLayer, index = currentSession.content.layers.size)

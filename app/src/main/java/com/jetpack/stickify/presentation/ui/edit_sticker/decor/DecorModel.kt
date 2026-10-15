@@ -1,6 +1,7 @@
 package com.jetpack.stickify.presentation.ui.edit_sticker.decor
 
 import android.graphics.Bitmap
+import com.jetpack.stickify.domain.model.AssetEntity
 import java.util.UUID
 
 /**
@@ -9,6 +10,8 @@ import java.util.UUID
 data class DecorModel(
     val id: String = UUID.randomUUID().toString(),
     val resId: Int = 0,
+    val path: String? = null,
+    val asset: AssetEntity? = null,
     val customBitmap: Bitmap? = null,
     var cx: Float = 0f,
     var cy: Float = 0f,
@@ -20,6 +23,8 @@ data class DecorModel(
         return copy(
             id = id,
             resId = resId,
+            path = path,
+            asset = asset,
             customBitmap = customBitmap,
             cx = cx,
             cy = cy,
@@ -33,6 +38,9 @@ data class DecorModel(
 data class DecorItem(
     val id: String,
     val name: String,
-    val resId: Int,
+    val resId: Int = 0,
+    val path: String? = null,
+    val asset: AssetEntity? = null,
+    val bitmap: Bitmap? = null,
     val isImportAction: Boolean = false
 )

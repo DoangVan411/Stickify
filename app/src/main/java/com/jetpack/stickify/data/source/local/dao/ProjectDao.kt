@@ -38,6 +38,9 @@ interface ProjectDao {
     @Query("DELETE FROM projects WHERE id = :id")
     suspend fun deleteProjectById(id: String)
 
+    @Query("DELETE FROM projects WHERE templateId = :templateId")
+    suspend fun deleteProjectsByTemplateId(templateId: String)
+
     @Query("SELECT * FROM projects WHERE isBookmarked = 1 ORDER BY updatedAt DESC")
     suspend fun getFavoriteProjects(): List<ProjectEntity>
 

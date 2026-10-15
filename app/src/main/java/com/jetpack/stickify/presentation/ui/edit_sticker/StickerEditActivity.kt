@@ -18,6 +18,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.ActivityStickerEditBinding
+import com.jetpack.stickify.domain.model.BuiltinAsset
 import com.jetpack.stickify.domain.model.StickerStyle
 import com.jetpack.stickify.presentation.ui.edit_sticker.border.BorderToolFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.prompt_sticker.AiGlowBorderDrawable
@@ -41,6 +42,7 @@ import com.jetpack.stickify.presentation.ui.edit_sticker.prompt_sticker.AiSticke
 import com.jetpack.stickify.presentation.ui.edit_sticker.prompt_sticker.AiStickerUiState
 import com.jetpack.stickify.presentation.ui.edit_sticker.prompt_sticker.AiStickerViewModel
 import com.jetpack.stickify.domain.model.BorderStyle
+import com.jetpack.stickify.domain.model.DecorationCategory
 import com.jetpack.stickify.domain.model.StickerAnimationType
 import com.jetpack.stickify.domain.model.SubjectLayer
 import com.jetpack.stickify.domain.model.TextAlign
@@ -48,6 +50,7 @@ import com.jetpack.stickify.domain.model.TextLayer
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextInputOverlayController
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextStyleSpec
 import com.jetpack.stickify.presentation.ui.edit_sticker.cancel.SaveConfirmDialogFragment
+import com.jetpack.stickify.presentation.ui.edit_sticker.decor.MaxDecorLimitDialogFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.prompt_sticker.AiHistoryResult
 import com.jetpack.stickify.presentation.ui.edit_sticker.prompt_sticker.EditSpan
 import com.jetpack.stickify.presentation.ui.edit_sticker.utils.PromptKeyboardAdjuster
@@ -58,6 +61,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import com.jetpack.stickify.presentation.ui.edit_sticker.utils.PromptUtils
+import java.util.UUID
+
 /**
  * Màn hình "Chỉnh sửa" sticker:
  * - Nhận ảnh đã cắt qua EXTRA_CROPPED_IMAGE_URI (từ CutoutActivity).
@@ -385,16 +390,32 @@ class StickerEditActivity : AppCompatActivity() {
         // Thêm decor khi người dùng chọn trong DecorToolFragment
         sharedViewModel.addedDecorEvent.observe(this) { decor ->
             if (decor != null) {
+                val currentDecorCount = if (isProjectMode) {
+                    editViewModel.uiState.value.editorSession.content.layers.count { it !is SubjectLayer }
+                } else {
+                    binding.zoomableView.getDecorCount()
+                }
+                if (currentDecorCount >= binding.zoomableView.maxDecorLimit) {
+                    binding.zoomableView.setDrawDecorBrush(null)
+                    showMaxDecorLimitDialog()
+                    return@observe
+                }
                 binding.zoomableView.setDrawDecorBrush(null)
-                val bitmap = decor.customBitmap ?: BitmapFactory.decodeResource(resources, decor.resId)
-                if (bitmap != null) {
-                    if (isProjectMode) {
-                        // Project: decor là DecorationLayer (lưu DB + undo/redo), không chỉ là decor tạm trong view
-                        val layerId = "layer_dec_${java.util.UUID.randomUUID()}"
-                        binding.zoomableView.preloadLayerBitmap(layerId, bitmap)
-                        editViewModel.addDecorationFromBitmap(this, bitmap, layerId)
-                    } else {
-                        binding.zoomableView.addDecorBitmap(bitmap, decor.id)
+
+                if (isProjectMode && decor.asset != null && !decor.asset.isCustom) {
+                    val category = if (decor.asset.category == "DECORATION") DecorationCategory.DRAWN else DecorationCategory.LABEL
+                    editViewModel.addBuiltinDecorationFromAsset(decor.asset, category)
+                } else {
+                    val bitmap = decor.customBitmap ?: decor.path?.let { loadBitmapFromPath(this, it) } ?: (if (decor.resId != 0) BitmapFactory.decodeResource(resources, decor.resId) else null)
+                    if (bitmap != null) {
+                        if (isProjectMode) {
+                            // Project: decor là DecorationLayer (lưu DB + undo/redo), không chỉ là decor tạm trong view
+                            val layerId = "layer_dec_${UUID.randomUUID()}"
+                            binding.zoomableView.preloadLayerBitmap(layerId, bitmap)
+                            editViewModel.addDecorationFromBitmap(this, bitmap, layerId)
+                        } else {
+                            binding.zoomableView.addDecorBitmap(bitmap, decor.id)
+                        }
                     }
                 }
             }
@@ -405,10 +426,33 @@ class StickerEditActivity : AppCompatActivity() {
             if (decor == null) {
                 binding.zoomableView.setDrawDecorBrush(null)
             } else {
-                val bitmap = decor.customBitmap ?: runCatching {
-                    BitmapFactory.decodeResource(resources, decor.resId)
-                }.getOrNull() ?: ContextCompat.getDrawable(this, decor.resId)?.toBitmap()
-                binding.zoomableView.setDrawDecorBrush(bitmap, decor.id)
+                val currentDecorCount = if (isProjectMode) {
+                    editViewModel.uiState.value.editorSession.content.layers.count { it !is SubjectLayer }
+                } else {
+                    binding.zoomableView.getDecorCount()
+                }
+                if (currentDecorCount >= binding.zoomableView.maxDecorLimit) {
+                    binding.zoomableView.setDrawDecorBrush(null)
+                    showMaxDecorLimitDialog()
+                } else {
+                    val bitmap = decor.customBitmap ?: decor.path?.let { loadBitmapFromPath(this, it) } ?: (if (decor.resId != 0) BitmapFactory.decodeResource(resources, decor.resId) else null)
+                    
+                    val assetRef = if (decor.asset != null && !decor.asset.isCustom) {
+                        val parts = decor.asset.path.split("/")
+                        val packId = if (parts.size >= 2) parts[parts.size - 2] else "pack_default"
+                        val assetId = parts.lastOrNull() ?: decor.asset.path
+                        BuiltinAsset(assetId = assetId, packId = packId)
+                    } else if (decor.path != null && !decor.path.startsWith("content://") && !decor.path.startsWith("file://")) {
+                        val parts = decor.path.split("/")
+                        val packId = if (parts.size >= 2) parts[parts.size - 2] else "pack_default"
+                        val assetId = parts.lastOrNull() ?: decor.path
+                        BuiltinAsset(assetId = assetId, packId = packId)
+                    } else {
+                        null
+                    }
+
+                    binding.zoomableView.setDrawDecorBrush(bitmap, decor.id, assetRef)
+                }
             }
         }
 
@@ -650,7 +694,24 @@ class StickerEditActivity : AppCompatActivity() {
         setupDoubleTapToEditText()
     }
 
+    private fun showMaxDecorLimitDialog() {
+        if (supportFragmentManager.findFragmentByTag(MaxDecorLimitDialogFragment.TAG) != null) return
+        MaxDecorLimitDialogFragment.newInstance()
+            .show(supportFragmentManager, MaxDecorLimitDialogFragment.TAG)
+    }
+
     private fun applyTextResult(result: TextInputOverlayController.TextEditResult) {
+        if (result.layerId == null) {
+            val currentDecorCount = if (isProjectMode) {
+                editViewModel.uiState.value.editorSession.content.layers.count { it !is SubjectLayer }
+            } else {
+                binding.zoomableView.getDecorCount()
+            }
+            if (currentDecorCount >= binding.zoomableView.maxDecorLimit) {
+                showMaxDecorLimitDialog()
+                return
+            }
+        }
         if (isProjectMode) {
             // Project: chữ là TextLayer (có Undo/Redo, được lưu vào DB, kèm font + nền/viền)
             val id = result.layerId
@@ -669,6 +730,9 @@ class StickerEditActivity : AppCompatActivity() {
     }
 
     private fun setupDoubleTapToEditText() {
+        binding.zoomableView.onMaxDecorLimitReached = {
+            showMaxDecorLimitDialog()
+        }
         // Layer decor/chữ của project: kéo/xoay/phóng/xóa/nhân bản -> ghi vào lịch sử qua ViewModel
         binding.zoomableView.onLayerTransformed = { id, cx, cy, scale, rotation ->
             if (isProjectMode) editViewModel.updateLayerTransform(id, cx, cy, scale, rotation)
@@ -679,8 +743,8 @@ class StickerEditActivity : AppCompatActivity() {
         binding.zoomableView.onLayerDuplicated = { sourceId, newId, cx, cy ->
             if (isProjectMode) editViewModel.duplicateLayer(sourceId, newId, cx, cy)
         }
-        binding.zoomableView.onDecorStampsCommitted = { bitmap, stamps ->
-            if (isProjectMode) editViewModel.addStampLayers(this, bitmap, stamps)
+        binding.zoomableView.onDecorStampsCommitted = { bitmap, assetRef, stamps ->
+            if (isProjectMode) editViewModel.addStampLayers(this, bitmap, assetRef, stamps)
         }
 
         // Double tap vào chữ -> mở lại màn hình nhập chữ với đúng màu / căn lề / font / nền của chữ đó
@@ -885,5 +949,28 @@ class StickerEditActivity : AppCompatActivity() {
     private fun handleDiscardChangesAction() {
         isDiscardingChanges = true // Bật cờ để onStop() bỏ qua việc lưu thumbnail
         finish() // Thoát ngay lập tức, trả lại trạng thái gốc
+    }
+
+    private fun loadBitmapFromPath(context: Context, path: String?): Bitmap? {
+        if (path.isNullOrBlank()) return null
+        return try {
+            context.assets.open(path).use { inputStream ->
+                BitmapFactory.decodeStream(inputStream)
+            }
+        } catch (_: Exception) {
+            try {
+                val file = File(path)
+                if (file.exists()) {
+                    BitmapFactory.decodeFile(file.absolutePath)
+                } else {
+                    val uri = Uri.parse(path)
+                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                        BitmapFactory.decodeStream(inputStream)
+                    }
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
     }
 }

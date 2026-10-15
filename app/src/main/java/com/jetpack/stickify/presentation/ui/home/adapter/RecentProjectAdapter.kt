@@ -1,6 +1,5 @@
 package com.jetpack.stickify.presentation.ui.home.adapter
 
-import android.graphics.BitmapFactory
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -11,6 +10,7 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
 import com.jetpack.stickify.R
 import com.jetpack.stickify.domain.model.ProjectEntity
 import com.jetpack.stickify.domain.model.ProjectType
@@ -28,6 +28,7 @@ enum class RecentAction {
  * Binding dữ liệu thumbnailPath, name, updatedAt và gửi projectId qua onItemClick.
  */
 class RecentProjectAdapter(
+    private val isVertical: Boolean = false,
     private val onItemClick: (project: ProjectEntity) -> Unit = {},
     private val onActionClick: (project: ProjectEntity, action: RecentAction) -> Unit = { _, _ -> }
 ) : ListAdapter<ProjectEntity, RecentProjectAdapter.ViewHolder>(DiffCallback()) {
@@ -35,24 +36,31 @@ class RecentProjectAdapter(
     private var calculatedItemWidth: Int = 0
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_recent_project, parent, false)
+        val layoutRes = if (isVertical) R.layout.item_recent_project_row else R.layout.item_recent_project
+        val view = LayoutInflater.from(parent.context).inflate(layoutRes, parent, false)
 
-        // Tính toán kích thước để vừa vặn đúng 3 item trên chiều ngang màn hình
-        if (calculatedItemWidth == 0) {
-            val displayMetrics = parent.context.resources.displayMetrics
-            val totalWidth = parent.measuredWidth.takeIf { it > 0 } ?: displayMetrics.widthPixels
-            val spacePx = (8 * displayMetrics.density).toInt()
-            val paddingHorizontal = parent.paddingStart + parent.paddingEnd
-            val availableWidth = totalWidth - paddingHorizontal - (2 * spacePx)
-            if (availableWidth > 0) {
-                calculatedItemWidth = availableWidth / 3
+        if (!isVertical) {
+            // Tính toán kích thước để vừa vặn đúng 3 item trên chiều ngang màn hình
+            if (calculatedItemWidth == 0) {
+                val displayMetrics = parent.context.resources.displayMetrics
+                val totalWidth = parent.measuredWidth.takeIf { it > 0 } ?: displayMetrics.widthPixels
+                val spacePx = (8 * displayMetrics.density).toInt()
+                val paddingHorizontal = parent.paddingStart + parent.paddingEnd
+                val availableWidth = totalWidth - paddingHorizontal - (2 * spacePx)
+                if (availableWidth > 0) {
+                    calculatedItemWidth = availableWidth / 3
+                }
             }
-        }
 
-        if (calculatedItemWidth > 0) {
+            if (calculatedItemWidth > 0) {
+                view.layoutParams = view.layoutParams.apply {
+                    width = calculatedItemWidth
+                }
+            }
+        } else {
             view.layoutParams = view.layoutParams.apply {
-                width = calculatedItemWidth
+                width = ViewGroup.LayoutParams.MATCH_PARENT
+                height = ViewGroup.LayoutParams.WRAP_CONTENT
             }
         }
 
@@ -92,18 +100,24 @@ class RecentProjectAdapter(
                 }
             }
 
-            // Kiểm tra xem thumbnailPath có phải đường dẫn file trên bộ nhớ không
-            val file = File(project.thumbnailPath)
-            if (file.exists() && file.isFile) {
-                val bitmap = BitmapFactory.decodeFile(file.absolutePath)
-                if (bitmap != null) {
-                    ivThumbnail.setImageBitmap(bitmap)
-                } else {
-                    ivThumbnail.setImageResource(getPlaceholderDrawable(project.thumbnailPath))
+            val thumbUrl = project.thumbnailPath
+            val glideModel: Any = when {
+                thumbUrl.startsWith("http://") || thumbUrl.startsWith("https://") || thumbUrl.startsWith("file://") || thumbUrl.startsWith("content://") -> {
+                    thumbUrl
                 }
-            } else {
-                ivThumbnail.setImageResource(getPlaceholderDrawable(project.thumbnailPath))
+                thumbUrl.startsWith("/") -> {
+                    File(thumbUrl)
+                }
+                else -> {
+                    "file:///android_asset/$thumbUrl"
+                }
             }
+
+            Glide.with(itemView.context)
+                .load(glideModel)
+                .placeholder(getPlaceholderDrawable(project.thumbnailPath))
+                .error(getPlaceholderDrawable(project.thumbnailPath))
+                .into(ivThumbnail)
 
             ivMore.setOnClickListener { view ->
                 showPopupMenu(view, project)

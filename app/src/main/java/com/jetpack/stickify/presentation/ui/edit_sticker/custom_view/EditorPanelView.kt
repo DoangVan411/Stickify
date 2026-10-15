@@ -32,12 +32,12 @@ class EditorPanelView @JvmOverloads constructor(
 
     // Dữ liệu mô phỏng cho Tab (để hiển thị icon và chữ)
     // Khai báo danh sách các tab kèm icon (đảm bảo bạn đã thêm các vector asset này vào thư mục res/drawable)
-    private val tabs = listOf(
-        TabItem("suggest","Đề xuất", R.drawable.ic_spark),  // Icon ngôi sao lấp lánh
-        TabItem("text","Chữ", R.drawable.ic_text),         // Icon chữ T
-        TabItem("effect","Hiệu ứng", R.drawable.ic_effect),       // Icon cây đũa phép
-        TabItem("decore","Trang trí", R.drawable.ic_decore),     // Icon bông hoa
-        TabItem("border","Viền", R.drawable.ic_border)         // Icon khung viền nét đứt
+    private var tabs = listOf(
+        TabItem("suggest", "Đề xuất", R.drawable.ic_spark),  // Icon ngôi sao lấp lánh
+        TabItem("text", "Chữ", R.drawable.ic_text),         // Icon chữ T
+        TabItem("effect", "Hiệu ứng", R.drawable.ic_effect),       // Icon cây đũa phép
+        TabItem("decore", "Trang trí", R.drawable.ic_decore),     // Icon bông hoa
+        TabItem("border", "Viền", R.drawable.ic_border)         // Icon khung viền nét đứt
     )
     private var currentTabIndex = 0
 
@@ -47,17 +47,20 @@ class EditorPanelView @JvmOverloads constructor(
         viewTabHighlight = findViewById(R.id.vTabHighlight)
         llTabContainer = findViewById(R.id.llTabContainer)
 
-        setupTabs()
+        setupTabs(0)
     }
 
     fun setOnTabSelectedListener(listener: OnTabSelectedListener) {
-
         this.tabListener = listener
     }
 
+    fun setTabs(newTabs: List<TabItem>, defaultPosition: Int = 0) {
+        tabs = newTabs
+        setupTabs(defaultPosition)
+    }
 
-
-    private fun setupTabs() {
+    private fun setupTabs(defaultPosition: Int = 0) {
+        llTabContainer.weightSum = tabs.size.toFloat()
         llTabContainer.removeAllViews()
         for (i in tabs.indices) {
             val tabView = LayoutInflater.from(context).inflate(R.layout.item_top_tab, llTabContainer, false)
@@ -74,9 +77,19 @@ class EditorPanelView @JvmOverloads constructor(
             llTabContainer.addView(tabView)
         }
 
-        // Mặc định chọn tab đầu tiên
+        // Mặc định chọn tab defaultPosition
         llTabContainer.post {
-            animateTabSelection(0, llTabContainer.getChildAt(0))
+            val idx = defaultPosition.coerceIn(0, (llTabContainer.childCount - 1).coerceAtLeast(0))
+            if (llTabContainer.childCount > 0) {
+                animateTabSelection(idx, llTabContainer.getChildAt(idx))
+            }
+        }
+    }
+    fun selectTab(index: Int) {
+        // Kiểm tra an toàn xem index có tồn tại trong danh sách View không
+        if (index >= 0 && index < llTabContainer.childCount) {
+            val targetView = llTabContainer.getChildAt(index)
+            animateTabSelection(index, targetView)
         }
     }
 
@@ -86,9 +99,14 @@ class EditorPanelView @JvmOverloads constructor(
         // Gọi listener này khi user click vào một Tab
         tabListener?.onTabSelected(index, tabs[index].title)
 
+        // Tính toán tọa độ X để vTabHighlight nằm chính giữa selectedView
+        // selectedView.x: Tọa độ mép trái của tab
+        // (selectedView.width - viewTabHighlight.width) / 2f: Tính độ lệch để căn giữa
+        val targetX = selectedView.x + (selectedView.width - viewTabHighlight.width) / 2f
+
         // 1. Animation trượt nền xanh (vTabHighlight) đến vị trí của tab được click
         viewTabHighlight.animate()
-            .x(selectedView.x)
+            .x(targetX)
             .setDuration(300)
             .setInterpolator(OvershootInterpolator(0.8f)) // Hiệu ứng nảy nhẹ
             .start()

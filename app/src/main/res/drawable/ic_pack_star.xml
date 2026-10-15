@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="28"
+    android:viewportHeight="28">
+    <!-- Star body -->
+    <path
+        android:fillColor="#FFCA28"
+        android:strokeColor="#FFA000"
+        android:strokeWidth="1"
+        android:pathData="M14,3l3.2,6.5 7.1,1 -5.2,5 1.2,7.1 -6.3,-3.3 -6.3,3.3 1.2,-7.1 -5.2,-5 7.1,-1z" />
+    <!-- Eyes -->
+    <path
+        android:fillColor="#3E2723"
+        android:pathData="M11.5,13.5a1,1 0,1 1,0 -2a1,1 0,1 1,0 2z M16.5,13.5a1,1 0,1 1,0 -2a1,1 0,1 1,0 2z" />
+    <!-- Blushes -->
+    <path
+        android:fillColor="#FF8A80"
+        android:pathData="M9.5,14.5m-1,0a1,1 0,1 1,2 0a1,1 0,1 1,-2 0 M18.5,14.5m-1,0a1,1 0,1 1,2 0a1,1 0,1 1,-2 0" />
+    <!-- Smile -->
+    <path
+        android:strokeColor="#3E2723"
+        android:strokeWidth="1"
+        android:strokeLineCap="round"
+        android:pathData="M13,15.5c0.6,0.6 1.4,0.6 2,0" />
+</vector>

@@ -1,0 +1,16 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Mũi tên ngang qua lại — biểu thị rung lắc -->
+    <path
+        android:fillColor="#666666"
+        android:pathData="M2,12l4,-4v3h4v2H6v3L2,12z" />
+    <path
+        android:fillColor="#666666"
+        android:pathData="M22,12l-4,4v-3h-4v-2h4V8l4,4z" />
+    <path
+        android:fillColor="#666666"
+        android:pathData="M11,10h2v4h-2z" />
+</vector>

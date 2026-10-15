@@ -7,12 +7,14 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.SeekBar
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.recyclerview.widget.RecyclerView
 import com.jetpack.stickify.R
 import com.jetpack.stickify.presentation.ui.edit_sticker.StickerSharedViewModel
 import androidx.core.graphics.toColorInt
+import com.jetpack.stickify.presentation.ui.edit_sticker.StickerEditActivity
 
 class BorderToolFragment : Fragment() {
 
@@ -55,8 +57,9 @@ class BorderToolFragment : Fragment() {
     }
 
     private fun setBorderInit() {
-        val thickness = sharedViewModel.currentBorderThickness.value ?: 30
-        val distance = sharedViewModel.currentBorderDistance.value ?: 20
+        if(checkAiState()) return
+        val thickness = 20
+        val distance = 0
         val color = sharedViewModel.currentBorderColor.value ?: Color.WHITE
         sharedViewModel.updateBorderConfig(thickness, distance, color)
     }
@@ -66,6 +69,7 @@ class BorderToolFragment : Fragment() {
             colors = defaultColors,
             selectedColor = sharedViewModel.currentBorderColor.value ?: Color.WHITE
         ) { selectedColor ->
+            if(checkAiState()) return@ColorPickerAdapter
             // Báo ViewModel cập nhật Màu Sắc
             sharedViewModel.updateBorderConfig(color = selectedColor)
         }
@@ -80,6 +84,7 @@ class BorderToolFragment : Fragment() {
         val changeListener = object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
+                    if(checkAiState()) return
                     when (seekBar?.id) {
                         R.id.sbThickness -> sharedViewModel.updateBorderConfig(thickness = progress)
                         R.id.sbDistance -> sharedViewModel.updateBorderConfig(distance = progress)
@@ -92,5 +97,16 @@ class BorderToolFragment : Fragment() {
 
         sbThickness.setOnSeekBarChangeListener(changeListener)
         sbDistance.setOnSeekBarChangeListener(changeListener)
+    }
+    private fun checkAiState(): Boolean{
+        val act = activity as? StickerEditActivity
+        if(act?.isProjectMode == true){
+            if(act.hasAiAnimation()){
+                Toast.makeText(context, "Sticker AI không áp dụng border", Toast.LENGTH_SHORT).show()
+                return true
+            }
+            return false
+        }
+        return false
     }
 }

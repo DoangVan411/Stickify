@@ -1,0 +1,303 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/white">
+
+        <!-- Top Bar -->
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginTop="16dp"
+            android:background="@android:color/transparent"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_back"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/tvTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/edit_gif_title"
+            android:textColor="@color/text_border_t100"
+            android:textSize="16sp"
+            android:fontFamily="@font/inter_semibold"
+            app:layout_constraintBottom_toBottomOf="@id/btnBack"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="@id/btnBack" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCreate"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginEnd="16dp"
+            android:background="@drawable/bg_button_primary"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="@string/btn_create_gif"
+            android:textSize="14sp"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            app:backgroundTint="@null"
+            app:layout_constraintBottom_toBottomOf="@id/btnBack"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="@id/btnBack" />
+
+        <!-- Vùng preview video + phông nền caro + vẽ decor/sticker/text -->
+        <FrameLayout
+            android:id="@+id/previewContainer"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_marginTop="16dp"
+            app:layout_constraintDimensionRatio="1:0.9"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/btnBack">
+
+            <!-- Phông nền caro -->
+            <com.jetpack.stickify.presentation.ui.edit_gif.CheckeredPatternView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <!-- TextureView phát đoạn video lặp lại -->
+            <TextureView
+                android:id="@+id/textureView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <!-- ZoomableStickerView overlay (trong suốt) cho phép vẽ decor, thêm nhãn, kéo thả, xoay phóng -->
+            <com.jetpack.stickify.presentation.ui.edit_sticker.ZoomableStickerView
+                android:id="@+id/zoomableView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <!-- Lottie/ProgressBar khi đang tải hoặc xuất GIF -->
+            <com.airbnb.lottie.LottieAnimationView
+                android:id="@+id/progressBar"
+                android:layout_width="90dp"
+                android:layout_height="90dp"
+                android:layout_gravity="center"
+                android:visibility="gone"
+                app:lottie_autoPlay="true"
+                app:lottie_fileName="anim_loading.json"
+                app:lottie_loop="true" />
+
+            <!-- Nút Undo / Redo trên góc phải canvas -->
+            <LinearLayout
+                android:id="@+id/undoRedoGroup"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|end"
+                android:layout_margin="14dp"
+                android:background="@drawable/bg_pill_white"
+                android:elevation="4dp"
+                android:orientation="horizontal"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp">
+
+                <ImageButton
+                    android:id="@+id/btnUndo"
+                    android:layout_width="40dp"
+                    android:layout_height="36dp"
+                    android:background="@android:color/transparent"
+                    android:padding="6dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_undo"
+                    app:tint="@color/text_border_t100" />
+
+                <ImageButton
+                    android:id="@+id/btnRedo"
+                    android:layout_width="40dp"
+                    android:layout_height="36dp"
+                    android:background="@android:color/transparent"
+                    android:padding="6dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_redo"
+                    app:tint="@color/text_border_t100" />
+
+            </LinearLayout>
+
+        </FrameLayout>
+
+        <!-- Thanh công cụ 3 tab: Trang trí | Chữ | Tốc độ -->
+        <com.jetpack.stickify.presentation.ui.edit_sticker.custom_view.EditorPanelView
+            android:id="@+id/editorPanel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="12dp"
+            android:layout_marginTop="20dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/previewContainer" />
+
+        <!-- Vùng chứa chi tiết công cụ (DecorToolFragment, Chữ, Tốc độ) -->
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/featureScrollView"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_marginTop="8dp"
+            android:clipToPadding="false"
+            android:fillViewport="true"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/editorPanel">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <FrameLayout
+                    android:id="@+id/featureContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingBottom="24dp" />
+
+                <!-- Bảng điều khiển tốc độ (khi chọn Tab "Tốc độ") -->
+                <androidx.cardview.widget.CardView
+                    android:id="@+id/speedControlContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="16dp"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="24dp"
+                    android:visibility="gone"
+                    app:cardBackgroundColor="@android:color/white"
+                    app:cardCornerRadius="20dp"
+                    app:cardElevation="3dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <RelativeLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_alignParentStart="true"
+                                android:layout_centerVertical="true"
+                                android:fontFamily="@font/inter_semibold"
+                                android:text="Tốc độ phát GIF"
+                                android:textColor="#111111"
+                                android:textSize="14sp" />
+
+                            <TextView
+                                android:id="@+id/tvCurrentSpeed"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_alignParentEnd="true"
+                                android:layout_centerVertical="true"
+                                android:background="@drawable/bg_tab_selected"
+                                android:fontFamily="@font/inter_semibold"
+                                android:textStyle="bold"
+                                android:paddingHorizontal="10dp"
+                                android:paddingVertical="3dp"
+                                android:text="1.0x"
+                                android:textColor="@color/colorPrimary"
+                                android:textSize="13sp" />
+                        </RelativeLayout>
+
+                        <!-- Thanh kéo chỉnh tốc độ (SeekBar) -->
+                        <SeekBar
+                            android:id="@+id/sbSpeed"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:max="4"
+                            android:progress="2"
+                            android:progressTint="@color/colorPrimary"
+                            android:splitTrack="false"
+                            android:thumbTint="@color/colorPrimary" />
+
+                        <!-- Các mốc giá trị 0.5x, 0.75x, 1.0x, 1.5x, 2.0x -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:orientation="horizontal"
+                            android:paddingHorizontal="12dp">
+
+                            <TextView
+                                android:id="@+id/tvSpeed05"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:gravity="start"
+                                android:text="0.5x"
+                                android:textColor="#7A7A7A"
+                                android:textSize="12sp" />
+
+                            <TextView
+                                android:id="@+id/tvSpeed075"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:gravity="center"
+                                android:text="0.75x"
+                                android:textColor="#7A7A7A"
+                                android:textSize="12sp" />
+
+                            <TextView
+                                android:id="@+id/tvSpeed10"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:gravity="center"
+                                android:text="1.0x"
+                                android:textColor="@color/colorPrimary"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvSpeed15"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:gravity="center"
+                                android:text="1.5x"
+                                android:textColor="#7A7A7A"
+                                android:textSize="12sp" />
+
+                            <TextView
+                                android:id="@+id/tvSpeed20"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:gravity="end"
+                                android:text="2.0x"
+                                android:textColor="#7A7A7A"
+                                android:textSize="12sp" />
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                </androidx.cardview.widget.CardView>
+
+            </LinearLayout>
+
+        </androidx.core.widget.NestedScrollView>
+
+        <!-- Overlay nhập text -->
+        <include
+            android:id="@+id/addTextLayout"
+            layout="@layout/layout_add_text" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</layout>

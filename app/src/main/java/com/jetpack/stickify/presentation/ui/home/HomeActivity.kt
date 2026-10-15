@@ -5,21 +5,24 @@ import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.widget.ImageViewCompat
 import androidx.navigation.NavController
 import androidx.navigation.fragment.NavHostFragment
+import com.google.android.material.behavior.HideBottomViewOnScrollBehavior
 import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.ActivityHomeBinding
 import com.jetpack.stickify.presentation.ui.gallery.GalleryActivity
+import com.jetpack.stickify.presentation.ui.keyboard.EnableKeyboardDialogFragment
 import dagger.hilt.android.AndroidEntryPoint
 
 /**
@@ -62,6 +65,23 @@ class HomeActivity : AppCompatActivity() {
         setupBottomBar()
     }
 
+    override fun onResume() {
+        super.onResume()
+        checkKeyboardEnabled()
+    }
+
+    private fun checkKeyboardEnabled() {
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+        val enabledMethods = imm.enabledInputMethodList
+        val isEnabled = enabledMethods.any { it.packageName == packageName }
+        if (!isEnabled) {
+            val dialog = EnableKeyboardDialogFragment.newInstance()
+            if (supportFragmentManager.findFragmentByTag(EnableKeyboardDialogFragment.TAG) == null) {
+                dialog.show(supportFragmentManager, EnableKeyboardDialogFragment.TAG)
+            }
+        }
+    }
+
     private fun setupNavigation() {
         val navHostFragment = supportFragmentManager
             .findFragmentById(R.id.navHostFragmentHome) as NavHostFragment
@@ -84,8 +104,23 @@ class HomeActivity : AppCompatActivity() {
         selectTab(BottomNavTab.HOME)
     }
 
+    fun setBottomBarVisible(visible: Boolean) {
+        val layoutBar = binding.layoutBottomBar
+        @Suppress("UNCHECKED_CAST")
+        val behavior = (layoutBar.layoutParams as? CoordinatorLayout.LayoutParams)?.behavior as? HideBottomViewOnScrollBehavior<LinearLayout>
+        if (visible) {
+            behavior?.slideUp(layoutBar)
+        } else {
+            behavior?.slideDown(layoutBar)
+        }
+    }
+
     private fun selectTab(tab: BottomNavTab) {
         currentTab = tab
+
+        @Suppress("UNCHECKED_CAST")
+        val behavior = (binding.layoutBottomBar.layoutParams as? CoordinatorLayout.LayoutParams)?.behavior as? HideBottomViewOnScrollBehavior<LinearLayout>
+        behavior?.slideUp(binding.layoutBottomBar)
 
         val primaryColor = ContextCompat.getColor(this, R.color.colorPrimary)
         val unselectedColor = ContextCompat.getColor(this, R.color.text_border_75)
@@ -124,10 +159,14 @@ class HomeActivity : AppCompatActivity() {
                 }
             }
             BottomNavTab.COLLECTION -> {
-                Toast.makeText(this, getString(R.string.tab_collection), Toast.LENGTH_SHORT).show()
+                if (navController.currentDestination?.id != R.id.collectionFragment) {
+                    navController.navigate(R.id.collectionFragment)
+                }
             }
             BottomNavTab.RESOURCES -> {
-                Toast.makeText(this, getString(R.string.tab_resources), Toast.LENGTH_SHORT).show()
+                if (navController.currentDestination?.id != R.id.assetFragment) {
+                    navController.navigate(R.id.assetFragment)
+                }
             }
         }
     }

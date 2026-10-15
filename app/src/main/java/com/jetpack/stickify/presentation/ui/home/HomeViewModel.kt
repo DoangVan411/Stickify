@@ -2,13 +2,24 @@ package com.jetpack.stickify.presentation.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.jetpack.stickify.data.source.local.converter.GsonProvider
+import com.jetpack.stickify.domain.model.CustomAsset
 import com.jetpack.stickify.domain.model.ExploreCategory
+import com.jetpack.stickify.domain.model.ProjectContent
+import com.jetpack.stickify.domain.model.ProjectEntity
+import com.jetpack.stickify.domain.model.ProjectType
+import com.jetpack.stickify.domain.model.StickerTemplate
+import com.jetpack.stickify.domain.model.SubjectLayer
+import com.jetpack.stickify.domain.model.Transform
+import com.jetpack.stickify.domain.repository.ProjectRepository
 import com.jetpack.stickify.domain.usecase.GetExploreTemplatesUseCase
 import com.jetpack.stickify.domain.usecase.GetRecentProjectsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -20,29 +31,39 @@ import javax.inject.Inject
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val getRecentProjectsUseCase: GetRecentProjectsUseCase,
-    private val getExploreTemplatesUseCase: GetExploreTemplatesUseCase
+    private val getExploreTemplatesUseCase: GetExploreTemplatesUseCase,
+    private val projectRepository: ProjectRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
-        loadData()
+        observeRecentProjects()
+        loadExploreTemplates()
     }
 
-    private fun loadData() {
+    private fun observeRecentProjects() {
+        viewModelScope.launch {
+            // Đảm bảo dữ liệu mẫu ban đầu được khởi tạo từ Seeder nếu DB rỗng
+            getRecentProjectsUseCase()
+
+            // Lắng nghe dữ liệu theo thời gian thực để đưa vào RecentProjectAdapter
+            getRecentProjectsUseCase.getFlow()
+                .catch { e ->
+                    _uiState.update { it.copy(error = e.message, isLoading = false) }
+                }
+                .collectLatest { projects ->
+                    // Thêm isLoading = false để ẩn ProgressBar trên HomeFragment
+                    _uiState.update { it.copy(recentProjects = projects, isLoading = false) }
+                }
+        }
+    }
+
+    private fun loadExploreTemplates() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
 
-            // Load recent projects
-            val recentResult = getRecentProjectsUseCase()
-            recentResult.onSuccess { projects ->
-                _uiState.update { it.copy(recentProjects = projects) }
-            }.onFailure { error ->
-                _uiState.update { it.copy(error = error.message) }
-            }
-
-            // Load explore templates
             val exploreResult = getExploreTemplatesUseCase(_uiState.value.selectedCategory)
             exploreResult.onSuccess { templates ->
                 _uiState.update { it.copy(exploreTemplates = templates, isLoading = false) }
@@ -55,19 +76,115 @@ class HomeViewModel @Inject constructor(
     fun onCategorySelected(category: ExploreCategory) {
         if (category == _uiState.value.selectedCategory) return
 
-        _uiState.update { it.copy(selectedCategory = category) }
+        // Bật lại trạng thái loading khi đổi tab Category
+        _uiState.update { it.copy(selectedCategory = category, isLoading = true) }
 
         viewModelScope.launch {
             val result = getExploreTemplatesUseCase(category)
             result.onSuccess { templates ->
-                _uiState.update { it.copy(exploreTemplates = templates) }
+                // Tắt loading sau khi load xong danh sách Template theo thể loại mới
+                _uiState.update { it.copy(exploreTemplates = templates, isLoading = false) }
             }.onFailure { error ->
-                _uiState.update { it.copy(error = error.message) }
+                _uiState.update { it.copy(error = error.message, isLoading = false) }
+            }
+        }
+    }
+
+    fun toggleBookmark(projectId: String, isBookmarked: Boolean) {
+        viewModelScope.launch {
+            projectRepository.toggleBookmark(projectId, isBookmarked)
+        }
+    }
+
+    fun toggleTemplateBookmark(templateId: String, isBookmarked: Boolean, onResult: (Boolean) -> Unit = {}) {
+        try {
+            viewModelScope.launch {
+                projectRepository.toggleTemplateBookmark(templateId, isBookmarked)
+                loadExploreTemplates()
+            }
+            onResult(true)
+        } catch (e: Exception) {
+            onResult(false)
+
+        }
+
+    }
+
+    fun deleteProject(projectId: String) {
+        viewModelScope.launch {
+            projectRepository.deleteProject(projectId)
+        }
+    }
+
+    fun updateProjectName(projectId: String, newName: String) {
+        viewModelScope.launch {
+            projectRepository.updateProjectName(projectId, newName)
+        }
+    }
+
+    fun addToExplore(project: ProjectEntity, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            val content = if (!project.contentJson.isNullOrBlank()) {
+                try {
+                    GsonProvider.gson.fromJson(
+                        project.contentJson,
+                        ProjectContent::class.java
+                    )
+                } catch (e: Exception) {
+                    ProjectContent()
+                }
+            } else {
+                ProjectContent()
+            }
+
+            val templateContent = content.copy(
+                layers = content.layers.map { layer ->
+                    if (layer is SubjectLayer) {
+                        layer.copy(isTemplatePlaceholder = true)
+                    } else layer
+                }
+            )
+
+            val template = StickerTemplate(
+                id = "tpl_${project.id}_${System.currentTimeMillis()}",
+                title = project.name,
+                type = project.type,
+                tags = listOf("user", "custom"),
+                thumbnailUrl = project.thumbnailPath.ifBlank { "explore_1" },
+                content = templateContent,
+                isAnimated = project.type == ProjectType.GIF || project.type == ProjectType.ANIMATED_STICKER
+            )
+
+            val result = projectRepository.saveTemplate(template)
+            if (result.isSuccess) {
+                loadExploreTemplates()
+                onResult(true)
+            } else {
+                onResult(false)
             }
         }
     }
 
     fun refresh() {
-        loadData()
+        loadExploreTemplates()
+    }
+
+    fun addTemplateToFavorites(template: StickerTemplate, onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val subjectLayer = SubjectLayer(
+                    id = "layer_subject_main",
+                    transform = Transform(cx = 256f, cy = 256f, scale = 1f),
+                    visible = true,
+                    source = CustomAsset(template.thumbnailUrl),
+                    isTemplatePlaceholder = false
+                )
+                val project = template.instantiate(subjectLayer).copy(isBookmarked = true)
+                val result = projectRepository.saveProject(project)
+                onResult(result.isSuccess)
+            } catch (_: Exception) {
+                onResult(false)
+            }
+        }
     }
 }

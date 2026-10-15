@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="4dp">
+
+    <LinearLayout
+        android:id="@+id/effectContainer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingVertical="12dp">
+
+        <!-- Icon hiệu ứng -->
+        <ImageView
+            android:id="@+id/ivEffectIcon"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:scaleType="centerInside" />
+
+        <!-- Tên hiệu ứng -->
+        <TextView
+            android:id="@+id/tvEffectName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:textColor="#444444"
+            android:textSize="12sp" />
+
+    </LinearLayout>
+
+    <!-- Chỉ báo đã chọn -->
+    <View
+        android:id="@+id/selectedIndicator"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/bg_effect_selected"
+        android:visibility="gone" />
+
+</FrameLayout>

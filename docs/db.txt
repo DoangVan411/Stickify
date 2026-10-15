@@ -1,0 +1,328 @@
+@startuml
+title Sticker Editor - Class Diagram
+
+top to bottom direction
+skinparam classAttributeIconSize 0
+
+
+' =========================================================
+' ENUMS
+' =========================================================
+
+enum ProjectType {
+    STICKER
+    GIF
+    ANIMATED_STICKER
+}
+
+enum ProjectOrigin {
+    CREATED
+    TEMPLATE
+}
+
+enum PlaybackSpeed {
+    X1
+    X2
+    X4
+    X6
+
+    --
+    +multiplier : Int
+}
+
+enum SubjectStyle {
+    ORIGINAL
+    OUTLINE
+    CARTOON
+}
+
+enum MediaKind {
+    IMAGE
+    GIF
+    VIDEO
+}
+
+enum TextAlign {
+    LEFT
+    CENTER
+    RIGHT
+}
+
+enum DecorationCategory {
+    DRAWN
+    LABEL
+    CUSTOM
+}
+
+
+' =========================================================
+' CORE MODELS
+' =========================================================
+
+class StickerProject {
+    +id : String
+    +name : String
+    +type : ProjectType
+    +origin : ProjectOrigin
+    +templateId : String
+    +thumbnailPath : String
+    +exportedPath : String
+    +createdAt : Long
+    +updatedAt : Long
+    +content : ProjectContent
+    +history : EditHistory
+}
+
+class StickerTemplate {
+    +id : String
+    +title : String
+    +type : ProjectType
+    +tags : List~String~
+    +thumbnailUrl : String
+    +isBookmarked : Boolean
+    +content : ProjectContent
+    --
+    +instantiate(
+        userSubject : SubjectLayer,
+        now : Long
+    ) : StickerProject
+}
+
+class ProjectEntity <<persistence>> {
+    +id : String
+    +name : String
+    +type : String
+    +origin : String
+    +templateId : String
+    +thumbnailPath : String
+    +exportedPath : String
+    +createdAt : Long
+    +updatedAt : Long
+    +contentJson : String
+    +historyJson : String
+}
+
+class EditorSession {
+    +content : ProjectContent
+    +history : EditHistory
+    --
+    +perform(action : EditAction) : void
+    +undo() : void
+    +redo() : void
+}
+
+class ProjectContent {
+    +canvas : CanvasSpec
+    +layers : List~Layer~
+    +border : BorderStyle
+    +playback : Playback
+    --
+    +apply(action : EditAction) : ProjectContent
+}
+
+class CanvasSpec {
+    +width : Int = 512
+    +height : Int = 512
+}
+
+class Playback {
+    +speed : PlaybackSpeed
+    +loop : Boolean
+}
+
+class BorderStyle {
+    +thickness : Float
+    +spacing : Float
+    +colorArgb : Int
+}
+
+class Transform {
+    +cx : Float
+    +cy : Float
+    +scale : Float
+    +rotationDeg : Float
+    +flipX : Boolean
+    +opacity : Float
+}
+
+
+' =========================================================
+' ASSET REF
+' =========================================================
+
+interface AssetRef
+
+class BuiltinAsset {
+    +assetId : String
+    +packId : String
+}
+
+class CustomAsset {
+    +relativePath : String
+}
+
+class RemoteAsset {
+    +url : String
+}
+
+AssetRef <|.. BuiltinAsset
+AssetRef <|.. CustomAsset
+AssetRef <|.. RemoteAsset
+
+
+' =========================================================
+' LAYER
+' =========================================================
+
+interface Layer {
+    +id : String
+    +transform : Transform
+    +visible : Boolean
+}
+
+class SubjectLayer {
+    +source : AssetRef
+    +mediaKind : MediaKind
+    +cutoutPath : String
+    +style : SubjectStyle
+    +styledPath : String
+    +trimStartMs : Long
+    +trimEndMs : Long
+    +isTemplatePlaceholder : Boolean
+}
+
+class TextLayer {
+    +content : String
+    +fontId : String
+    +fontSizeRatio : Float
+    +colorArgb : Int
+    +strokeColorArgb : Int
+    +strokeWidthRatio : Float
+    +bold : Boolean
+    +italic : Boolean
+    +align : TextAlign
+    +boxWidthRatio : Float
+}
+
+class DecorationLayer {
+    +asset : AssetRef
+    +category : DecorationCategory
+}
+
+class EffectLayer {
+    +effectId : String
+    +params : Map~String, Float~
+    +targetLayerId : String
+    +startMs : Long
+    +durationMs : Long
+}
+
+
+Layer <|.. SubjectLayer
+Layer <|.. TextLayer
+Layer <|.. DecorationLayer
+Layer <|.. EffectLayer
+
+
+' =========================================================
+' EDIT ACTION / COMMAND PATTERN
+' =========================================================
+
+interface EditAction {
+    +inverse() : EditAction
+}
+
+class AddLayerAction {
+    +layer : Layer
+    +index : Int
+}
+
+class RemoveLayerAction {
+    +layer : Layer
+    +index : Int
+}
+
+class UpdateLayerAction {
+    +before : Layer
+    +after : Layer
+}
+
+class ReorderLayerAction {
+    +layerId : String
+    +from : Int
+    +to : Int
+}
+
+class ChangeBorderAction {
+    +before : BorderStyle
+    +after : BorderStyle
+}
+
+class ChangeSpeedAction {
+    +before : PlaybackSpeed
+    +after : PlaybackSpeed
+}
+
+
+EditAction <|.. AddLayerAction
+EditAction <|.. RemoveLayerAction
+EditAction <|.. UpdateLayerAction
+EditAction <|.. ReorderLayerAction
+EditAction <|.. ChangeBorderAction
+EditAction <|.. ChangeSpeedAction
+
+
+' =========================================================
+' EDIT HISTORY
+' =========================================================
+
+class EditHistory {
+    +undo : List~EditAction~
+    +redo : List~EditAction~
+    +canUndo : Boolean
+    +canRedo : Boolean
+}
+
+
+' =========================================================
+' RELATIONSHIPS
+' =========================================================
+
+StickerProject *-- ProjectContent
+StickerProject *-- EditHistory
+StickerProject --> ProjectType
+StickerProject --> ProjectOrigin
+
+StickerTemplate *-- ProjectContent
+StickerTemplate --> ProjectType
+
+EditorSession *-- ProjectContent
+EditorSession *-- EditHistory
+
+ProjectContent *-- CanvasSpec
+ProjectContent *-- "1..*" Layer
+ProjectContent o-- "0..1" BorderStyle
+ProjectContent o-- "0..1" Playback
+
+Playback --> PlaybackSpeed
+
+Layer *-- Transform
+
+SubjectLayer --> AssetRef
+SubjectLayer --> MediaKind
+SubjectLayer --> SubjectStyle
+
+TextLayer --> TextAlign
+
+DecorationLayer --> AssetRef
+DecorationLayer --> DecorationCategory
+
+EditHistory o-- "0..*" EditAction
+
+
+' =========================================================
+' OPTIONAL PERSISTENCE RELATION
+' =========================================================
+
+ProjectEntity ..> StickerProject : persists
+@enduml

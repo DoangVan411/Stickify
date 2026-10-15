@@ -82,8 +82,10 @@
 
             <ImageView
                 android:id="@+id/ivRecentMore"
-                android:layout_width="16dp"
-                android:layout_height="16dp"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:clickable="true"
+                android:focusable="true"
                 android:contentDescription="@string/more_options"
                 android:src="@drawable/ic_more_vert" />
 

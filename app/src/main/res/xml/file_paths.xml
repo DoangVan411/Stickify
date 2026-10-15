@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="cutouts" path="cutouts/" />
+    <files-path name="keyboard_stickers" path="keyboard_stickers/" />
+    <files-path name="stickers" path="stickers/" />
+    <files-path name="files_root" path="." />
+    <!-- Thêm dòng này để cho phép truy cập trực tiếp vào cacheDir -->
+    <cache-path name="cache_root" path="." />
 </paths>

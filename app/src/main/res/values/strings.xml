@@ -14,6 +14,7 @@
     <string name="create_sticker">Tạo Sticker</string>
     <string name="create_sticker_desc">Tự tay tạo bộ Sticker độc nhất của bạn</string>
     <string name="recent">Gần đây</string>
+    <string name="no_recent_projects">Chưa có dự án gần đây</string>
     <string name="see_all">Tất cả</string>
     <string name="explore">Khám phá</string>
 
@@ -21,6 +22,24 @@
     <string name="tab_home">Trang chủ</string>
     <string name="tab_collection">Bộ sưu tập</string>
     <string name="tab_resources">Tài nguyên</string>
+
+    <!-- Collection Screen -->
+    <string name="favorites">Yêu thích</string>
+    <string name="no_favorites">Chưa có yêu thích</string>
+    <string name="whatsapp_add">Thêm vào WhatsApp</string>
+    <string name="add_to_pack">Thêm vào gói</string>
+    <string name="action_favorite">Yêu thích</string>
+    <string name="action_unfavorite">Bỏ yêu thích</string>
+    <string name="action_rename">Chỉnh sửa tên</string>
+    <string name="action_delete">Xóa</string>
+    <string name="edit_name_title">Chỉnh sửa tên dự án</string>
+    <string name="hint_project_name">Nhập tên dự án</string>
+    <string name="btn_confirm">Xác nhận</string>
+    <string name="btn_cancel">Hủy</string>
+    <string name="sticker_packs">Bộ sticker</string>
+    <string name="create_new_pack">Tạo bộ sticker mới</string>
+    <string name="gifs_count">%1$d GIFs</string>
+    <string name="stickers_count">%1$d miếng dán</string>
 
     <!-- Categories -->
     <string name="category_all">Tất cả</string>
@@ -77,4 +96,13 @@
     <string name="btn_edit">Chỉnh sửa</string>
     <string name="btn_continue">Tiếp tục</string>
     <string name="select_image_or_video">Chọn ảnh hoặc video</string>
+    <string name="press_somethign">Nhập gì đó...</string>
+    <string name="select_video_clip">Chọn đoạn video</string>
+    <string name="edit_gif_title">Chỉnh sửa</string>
+    <string name="btn_create_gif">Tạo</string>
+    <string name="tool_decor">Trang trí</string>
+    <string name="tool_text">Chữ</string>
+    <string name="tool_speed">Tốc độ</string>
+    <string name="exporting_gif">Đang tạo GIF...</string>
+    <string name="gif_exported_success">Đã tạo GIF thành công!</string>
 </resources>

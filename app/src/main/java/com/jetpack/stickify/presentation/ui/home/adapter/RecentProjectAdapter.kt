@@ -4,45 +4,63 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
+import android.widget.PopupWindow
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
 import com.jetpack.stickify.R
 import com.jetpack.stickify.domain.model.ProjectEntity
 import com.jetpack.stickify.domain.model.ProjectType
+import java.io.File
+
+enum class RecentAction {
+    TOGGLE_FAVORITE,
+    RENAME,
+    ADD_TO_EXPLORE,
+    DELETE
+}
 
 /**
  * Adapter cho danh sách project gần đây (horizontal RecyclerView).
- * Item được thiết kế dạng card tương đồng với item khám phá (explore)
- * và tự động co giãn kích thước để màn hình hiển thị vừa vặn 3 item.
+ * Binding dữ liệu thumbnailPath, name, updatedAt và gửi projectId qua onItemClick.
  */
 class RecentProjectAdapter(
-    private val onItemClick: (ProjectEntity) -> Unit = {},
-    private val onMoreClick: (ProjectEntity) -> Unit = {}
+    private val isVertical: Boolean = false,
+    private val onItemClick: (project: ProjectEntity) -> Unit = {},
+    private val onActionClick: (project: ProjectEntity, action: RecentAction) -> Unit = { _, _ -> }
 ) : ListAdapter<ProjectEntity, RecentProjectAdapter.ViewHolder>(DiffCallback()) {
 
     private var calculatedItemWidth: Int = 0
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
-        val view = LayoutInflater.from(parent.context)
-            .inflate(R.layout.item_recent_project, parent, false)
+        val layoutRes = if (isVertical) R.layout.item_recent_project_row else R.layout.item_recent_project
+        val view = LayoutInflater.from(parent.context).inflate(layoutRes, parent, false)
 
-        // Tính toán kích thước để vừa vặn đúng 3 item trên chiều ngang màn hình
-        if (calculatedItemWidth == 0) {
-            val displayMetrics = parent.context.resources.displayMetrics
-            val totalWidth = parent.measuredWidth.takeIf { it > 0 } ?: displayMetrics.widthPixels
-            val spacePx = (8 * displayMetrics.density).toInt()
-            val paddingHorizontal = parent.paddingStart + parent.paddingEnd
-            val availableWidth = totalWidth - paddingHorizontal - (2 * spacePx)
-            if (availableWidth > 0) {
-                calculatedItemWidth = availableWidth / 3
+        if (!isVertical) {
+            // Tính toán kích thước để vừa vặn đúng 3 item trên chiều ngang màn hình
+            if (calculatedItemWidth == 0) {
+                val displayMetrics = parent.context.resources.displayMetrics
+                val totalWidth = parent.measuredWidth.takeIf { it > 0 } ?: displayMetrics.widthPixels
+                val spacePx = (8 * displayMetrics.density).toInt()
+                val paddingHorizontal = parent.paddingStart + parent.paddingEnd
+                val availableWidth = totalWidth - paddingHorizontal - (2 * spacePx)
+                if (availableWidth > 0) {
+                    calculatedItemWidth = availableWidth / 3
+                }
             }
-        }
 
-        if (calculatedItemWidth > 0) {
+            if (calculatedItemWidth > 0) {
+                view.layoutParams = view.layoutParams.apply {
+                    width = calculatedItemWidth
+                }
+            }
+        } else {
             view.layoutParams = view.layoutParams.apply {
-                width = calculatedItemWidth
+                width = ViewGroup.LayoutParams.MATCH_PARENT
+                height = ViewGroup.LayoutParams.WRAP_CONTENT
             }
         }
 
@@ -64,30 +82,101 @@ class RecentProjectAdapter(
             tvName.text = project.name
             tvTime.text = getRelativeTime(project.updatedAt)
 
-            // Badge GIF / STICKER tương đồng với Explore
+            // Badge GIF / STICKER
             tvBadge?.let { badge ->
                 when (project.type) {
                     ProjectType.GIF, ProjectType.ANIMATED_STICKER -> {
                         badge.text = "GIF"
                         badge.setBackgroundResource(R.drawable.bg_badge_gif)
-                        badge.setTextColor(androidx.core.content.ContextCompat.getColor(itemView.context, android.R.color.white))
+                        badge.setTextColor(ContextCompat.getColor(itemView.context, android.R.color.white))
                         badge.visibility = View.VISIBLE
                     }
                     ProjectType.STICKER -> {
                         badge.text = "STICKER"
                         badge.setBackgroundResource(R.drawable.bg_badge_sticker)
-                        badge.setTextColor(androidx.core.content.ContextCompat.getColor(itemView.context, android.R.color.white))
+                        badge.setTextColor(ContextCompat.getColor(itemView.context, android.R.color.white))
                         badge.visibility = View.VISIBLE
                     }
                 }
             }
 
-            // Sử dụng placeholder drawable dựa trên thumbnailPath
-            val drawableRes = getPlaceholderDrawable(project.thumbnailPath)
-            ivThumbnail.setImageResource(drawableRes)
+            val thumbUrl = project.thumbnailPath
+            val glideModel: Any = when {
+                thumbUrl.startsWith("http://") || thumbUrl.startsWith("https://") || thumbUrl.startsWith("file://") || thumbUrl.startsWith("content://") -> {
+                    thumbUrl
+                }
+                thumbUrl.startsWith("/") -> {
+                    File(thumbUrl)
+                }
+                else -> {
+                    "file:///android_asset/$thumbUrl"
+                }
+            }
 
-            ivMore.setOnClickListener { onMoreClick(project) }
+            Glide.with(itemView.context)
+                .load(glideModel)
+                .placeholder(getPlaceholderDrawable(project.thumbnailPath))
+                .error(getPlaceholderDrawable(project.thumbnailPath))
+                .into(ivThumbnail)
+
+            ivMore.setOnClickListener { view ->
+                showPopupMenu(view, project)
+            }
             itemView.setOnClickListener { onItemClick(project) }
+        }
+
+        private fun showPopupMenu(anchorView: View, project: ProjectEntity) {
+            val context = anchorView.context
+            val inflater = LayoutInflater.from(context)
+            val popupView = inflater.inflate(R.layout.popup_recent_menu, null)
+
+            val popupWindow = PopupWindow(
+                popupView,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                true
+            ).apply {
+                elevation = 5f * context.resources.displayMetrics.density
+                isOutsideTouchable = true
+                isFocusable = true
+            }
+
+            val btnFavorite = popupView.findViewById<View>(R.id.btnFavorite)
+            val tvFavoriteText = popupView.findViewById<TextView>(R.id.tvFavoriteText)
+            val ivFavoriteIcon = popupView.findViewById<ImageView>(R.id.ivFavoriteIcon)
+            val btnRename = popupView.findViewById<View>(R.id.btnRename)
+            val btnAddToExplore = popupView.findViewById<View>(R.id.btnAddToExplore)
+            val btnDelete = popupView.findViewById<View>(R.id.btnDelete)
+
+            if (project.isBookmarked) {
+                tvFavoriteText.setText(R.string.action_unfavorite)
+                ivFavoriteIcon.setImageResource(R.drawable.ic_bookmark)
+            } else {
+                tvFavoriteText.setText(R.string.action_favorite)
+                ivFavoriteIcon.setImageResource(R.drawable.ic_favorite_border)
+            }
+
+            btnFavorite.setOnClickListener {
+                popupWindow.dismiss()
+                onActionClick(project, RecentAction.TOGGLE_FAVORITE)
+            }
+
+            btnRename.setOnClickListener {
+                popupWindow.dismiss()
+                onActionClick(project, RecentAction.RENAME)
+            }
+
+            btnAddToExplore.setOnClickListener {
+                popupWindow.dismiss()
+                onActionClick(project, RecentAction.ADD_TO_EXPLORE)
+            }
+
+            btnDelete.setOnClickListener {
+                popupWindow.dismiss()
+                onActionClick(project, RecentAction.DELETE)
+            }
+
+            popupWindow.showAsDropDown(anchorView, -120, 0)
         }
 
         private fun getRelativeTime(timestamp: Long): String {

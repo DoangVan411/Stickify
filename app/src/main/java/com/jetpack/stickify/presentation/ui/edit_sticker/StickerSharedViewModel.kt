@@ -1,31 +1,58 @@
 package com.jetpack.stickify.presentation.ui.edit_sticker
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Color
+import androidx.core.graphics.scale
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.launch
-import javax.inject.Inject
-import android.graphics.Bitmap
-import android.graphics.Color
+import com.jetpack.stickify.data.processor.StickerStyleProcessor
+import com.jetpack.stickify.data.source.local.AssetLoader
+import com.jetpack.stickify.domain.model.AssetEntity
+import com.jetpack.stickify.domain.model.BorderStyle
+import com.jetpack.stickify.domain.model.Layer
+import com.jetpack.stickify.domain.model.Playback
+import com.jetpack.stickify.domain.model.StickerAnimationType
+import com.jetpack.stickify.domain.model.StickerProject
 import com.jetpack.stickify.domain.model.StickerStyle
+import com.jetpack.stickify.domain.model.SubjectLayer
+import com.jetpack.stickify.domain.model.SubjectStyle
+import com.jetpack.stickify.domain.usecase.ApplyBorderUseCase
+import com.jetpack.stickify.domain.usecase.ExportGifUseCase
+import com.jetpack.stickify.domain.usecase.GetAssetsUseCase
 import com.jetpack.stickify.domain.usecase.ProcessStickerUseCase
 import com.jetpack.stickify.domain.usecase.SaveStickerUseCase
-import androidx.core.graphics.scale
-import com.jetpack.stickify.domain.usecase.ApplyBorderUseCase
+import com.jetpack.stickify.presentation.ui.edit_gif.GifProjectHandler
+import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorModel
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.io.File
+import java.util.UUID
+import javax.inject.Inject
+import kotlin.time.Duration.Companion.milliseconds
 
-@HiltViewModel // Sử dụng Hilt để Inject
+@HiltViewModel
 class StickerSharedViewModel @Inject constructor(
     private val processStickerUseCase: ProcessStickerUseCase,
     private val saveStickerUseCase: SaveStickerUseCase,
-    private val applyBorderUseCase: ApplyBorderUseCase
+    private val applyBorderUseCase: ApplyBorderUseCase,
+    private val exportGifUseCase: ExportGifUseCase,
+    val assetLoader: AssetLoader,
+    private val gifProjectHandler: GifProjectHandler,
+    private val getAssetsUseCase: GetAssetsUseCase
 ) : ViewModel() {
 
     private val _isLoading = MutableLiveData<Boolean>()
     val isLoading: LiveData<Boolean> get() = _isLoading
 
-    // Lưu trữ ảnh trong RAM cho phiên làm việc
+    private var borderProcessJob: Job? = null
+
     val styleBitmaps = mutableMapOf<StickerStyle, Bitmap>()
     val styleThumbBitmaps = mutableMapOf<StickerStyle, Bitmap>()
 
@@ -34,25 +61,83 @@ class StickerSharedViewModel @Inject constructor(
 
     private val _currentStyle = MutableLiveData(StickerStyle.ORIGINAL)
 
-    private val coreBitmaps = mutableMapOf<StickerStyle, Bitmap>()
+    val coreBitmaps = mutableMapOf<StickerStyle, Bitmap>()
     val currentStyle: LiveData<StickerStyle> get() = _currentStyle
 
-    // Bắn sự kiện lưu thành công
     private val _saveSuccessEvent = MutableLiveData<String?>()
     val saveSuccessEvent: LiveData<String?> get() = _saveSuccessEvent
 
-    // Lịch sử Undo/Redo là logic của Presentation (UI state), nên giữ ở đây
     private val history = mutableListOf(StickerStyle.ORIGINAL)
     private var historyIndex = 0
 
     private val _historyState = MutableLiveData<Pair<Boolean, Boolean>>()
     val historyState: LiveData<Pair<Boolean, Boolean>> get() = _historyState
 
-
-    //border
+    // Border configs
     val currentBorderThickness = MutableLiveData<Int>(30)
     val currentBorderDistance = MutableLiveData<Int>(20)
     val currentBorderColor = MutableLiveData<Int>(Color.WHITE)
+
+    // Assets từ Room DB
+    private val _decorationAssets = MutableLiveData<List<AssetEntity>>(emptyList())
+    val decorationAssets: LiveData<List<AssetEntity>> get() = _decorationAssets
+
+    private val _labelAssets = MutableLiveData<List<AssetEntity>>(emptyList())
+    val labelAssets: LiveData<List<AssetEntity>> get() = _labelAssets
+
+    // Decor
+    private val _decorList = MutableLiveData<List<DecorModel>>(emptyList())
+    val decorList: LiveData<List<DecorModel>> get() = _decorList
+
+    private val _addedDecorEvent = MutableLiveData<DecorModel?>()
+    val addedDecorEvent: LiveData<DecorModel?> get() = _addedDecorEvent
+    private val _drawDecorModeEvent = MutableLiveData<DecorModel?>()
+    val drawDecorModeEvent: LiveData<DecorModel?> get() = _drawDecorModeEvent
+
+    private var restoredProjectId: String? = null
+
+    fun loadAssets() {
+        viewModelScope.launch {
+            try {
+                val decResult = getAssetsUseCase.get("DECORATION")
+                val lblResult = getAssetsUseCase.get("LABEL")
+                _decorationAssets.value = decResult.getOrDefault(emptyList())
+                _labelAssets.value = lblResult.getOrDefault(emptyList())
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun addDecor(resId: Int = 0, path: String? = null, asset: AssetEntity? = null, bitmap: Bitmap? = null, id: String = UUID.randomUUID().toString()) {
+        val newDecor = DecorModel(id = id, resId = resId, path = path, asset = asset, customBitmap = bitmap)
+        val current = _decorList.value.orEmpty().toMutableList()
+        current.add(newDecor)
+        _decorList.value = current
+        _drawDecorModeEvent.value = null
+        _addedDecorEvent.value = newDecor
+    }
+
+    fun addCustomDecor(bitmap: Bitmap) {
+        val newDecor = DecorModel(customBitmap = bitmap)
+        val current = _decorList.value.orEmpty().toMutableList()
+        current.add(newDecor)
+        _decorList.value = current
+        _drawDecorModeEvent.value = null
+        _addedDecorEvent.value = newDecor
+    }
+
+    fun selectDrawDecor(resId: Int = 0, path: String? = null, asset: AssetEntity? = null, bitmap: Bitmap? = null) {
+        _drawDecorModeEvent.value = if (resId != 0 || path != null || asset != null || bitmap != null) {
+            DecorModel(resId = resId, path = path, asset = asset, customBitmap = bitmap)
+        } else {
+            null
+        }
+    }
+
+    fun clearDrawDecor() {
+        _drawDecorModeEvent.value = null
+    }
 
     fun loadAndPrepareStyles(uriString: String) {
         if (styleBitmaps.isNotEmpty()) return
@@ -60,7 +145,6 @@ class StickerSharedViewModel @Inject constructor(
         _isLoading.value = true
         viewModelScope.launch {
             try {
-                // Gọi Use Case (Domain Layer)
                 val processed = processStickerUseCase(uriString)
 
                 styleBitmaps[StickerStyle.ORIGINAL] = processed.original
@@ -70,49 +154,187 @@ class StickerSharedViewModel @Inject constructor(
                 coreBitmaps[StickerStyle.ORIGINAL] = processed.original
                 coreBitmaps[StickerStyle.CARTOON] = processed.cartoon
 
-
-                // Tạo Thumbnails (Logic UI có thể giữ lại đây hoặc tách ra UseCase tuỳ độ nghiêm ngặt)
-                styleThumbBitmaps[StickerStyle.ORIGINAL] =
-                    createCenterFitThumbnail(processed.original, 240)
-                styleThumbBitmaps[StickerStyle.BORDER] =
-                    createCenterFitThumbnail(processed.border, 240)
-                styleThumbBitmaps[StickerStyle.CARTOON] =
-                    createCenterFitThumbnail(processed.cartoon, 240)
+                styleThumbBitmaps[StickerStyle.ORIGINAL] = createCenterFitThumbnail(processed.original, 240)
+                styleThumbBitmaps[StickerStyle.BORDER] = createCenterFitThumbnail(processed.border, 240)
+                styleThumbBitmaps[StickerStyle.CARTOON] = createCenterFitThumbnail(processed.cartoon, 240)
 
                 _imagesReady.value = true
                 _currentStyle.value = StickerStyle.ORIGINAL
 
                 updateHistoryState()
             } catch (e: Exception) {
-                // TODO: Xử lý lỗi (Hiển thị toast, etc.)
+                e.printStackTrace()
             } finally {
                 _isLoading.value = false
             }
         }
     }
 
-    fun saveCurrentSticker() {
-        val currentBitmap = styleBitmaps[_currentStyle.value ?: StickerStyle.ORIGINAL] ?: return
+    fun restoreFromProject(
+        context: Context,
+        projectId: String,
+        subjectLayer: SubjectLayer,
+        borderStyle: BorderStyle?,
+        playback: Playback?
+    ) {
+        if (restoredProjectId == projectId && styleBitmaps.isNotEmpty()) return
+        restoredProjectId = projectId
+
+        _isLoading.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val cutoutPath = subjectLayer.cutoutPath
+                val cutoutFile = if (!cutoutPath.isNullOrBlank()) {
+                    File(context.filesDir, cutoutPath)
+                } else null
+
+                val originalCore: Bitmap? = if (cutoutFile != null && cutoutFile.exists()) {
+                    BitmapFactory.decodeFile(cutoutFile.absolutePath)
+                } else {
+                    assetLoader.loadBitmap(subjectLayer.source)
+                }
+
+                if (originalCore == null) {
+                    _isLoading.postValue(false)
+                    return@launch
+                }
+
+                val cartoonPath = subjectLayer.cartoonCorePath
+                val cartoonFile = if (!cartoonPath.isNullOrBlank()) {
+                    File(context.filesDir, cartoonPath)
+                } else null
+
+                val cartoonCore: Bitmap = if (cartoonFile != null && cartoonFile.exists()) {
+                    BitmapFactory.decodeFile(cartoonFile.absolutePath) ?: StickerStyleProcessor.cartoonify(originalCore)
+                } else {
+                    StickerStyleProcessor.cartoonify(originalCore)
+                }
+
+                coreBitmaps[StickerStyle.ORIGINAL] = originalCore
+                coreBitmaps[StickerStyle.CARTOON] = cartoonCore
+
+                styleBitmaps[StickerStyle.ORIGINAL] = originalCore
+                styleBitmaps[StickerStyle.CARTOON] = cartoonCore
+
+                val thickness = borderStyle?.thickness?.toInt() ?: 30
+                val distance = borderStyle?.spacing?.toInt() ?: 20
+                val color = borderStyle?.colorArgb ?: Color.WHITE
+
+                currentBorderThickness.postValue(thickness)
+                currentBorderDistance.postValue(distance)
+                currentBorderColor.postValue(color)
+
+                val borderBitmap = applyBorderUseCase(
+                    original = originalCore,
+                    thickness = thickness,
+                    distance = distance,
+                    color = color
+                )
+                styleBitmaps[StickerStyle.BORDER] = borderBitmap
+
+                styleThumbBitmaps[StickerStyle.ORIGINAL] = createCenterFitThumbnail(originalCore, 240)
+                styleThumbBitmaps[StickerStyle.BORDER] = createCenterFitThumbnail(borderBitmap, 240)
+                styleThumbBitmaps[StickerStyle.CARTOON] = createCenterFitThumbnail(cartoonCore, 240)
+
+                val restoredStyle = when (subjectLayer.style) {
+                    SubjectStyle.OUTLINE -> StickerStyle.BORDER
+                    SubjectStyle.CARTOON -> StickerStyle.CARTOON
+                    SubjectStyle.ORIGINAL -> StickerStyle.ORIGINAL
+                }
+
+                val styledPath = subjectLayer.styledPath
+                val styledFile = if (!styledPath.isNullOrBlank()) File(context.filesDir, styledPath) else null
+                if (styledFile != null && styledFile.exists()) {
+                    val styledBmp = BitmapFactory.decodeFile(styledFile.absolutePath)
+                    if (styledBmp != null) {
+                        styleBitmaps[restoredStyle] = styledBmp
+                        styleThumbBitmaps[restoredStyle] = createCenterFitThumbnail(styledBmp, 240)
+                    }
+                }
+
+                _currentStyle.postValue(restoredStyle)
+
+                val restoredAnim = playback?.animationType ?: StickerAnimationType.NONE
+                _currentAnimation.postValue(restoredAnim)
+
+                _imagesReady.postValue(true)
+                updateHistoryState()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _isLoading.postValue(false)
+            }
+        }
+    }
+
+    // Animation / Effect
+    private val _currentAnimation = MutableLiveData(StickerAnimationType.NONE)
+    val currentAnimation: LiveData<StickerAnimationType> get() = _currentAnimation
+
+    fun setAnimation(animationType: StickerAnimationType) {
+        _currentAnimation.value = animationType
+    }
+
+    fun saveCurrentSticker(overrideBitmap: Bitmap? = null, sourceId: String? = null) {
+        val currentBitmap = overrideBitmap ?: styleBitmaps[_currentStyle.value ?: StickerStyle.ORIGINAL] ?: return
 
         _isLoading.value = true
         viewModelScope.launch {
             try {
-                // Gọi Use Case lưu ảnh
-                val savedUri = saveStickerUseCase(currentBitmap)
+                val anim = _currentAnimation.value
+                val isAnimated = anim != null && anim.isAnimated
+                val savedUri = if (isAnimated) {
+                    exportGifUseCase(currentBitmap, anim)
+                } else {
+                    saveStickerUseCase(currentBitmap)
+                }
+
                 _saveSuccessEvent.value = savedUri
             } catch (e: Exception) {
-                // Handle Error
+                e.printStackTrace()
             } finally {
                 _isLoading.value = false
             }
         }
+    }
+
+    suspend fun saveGifProject(
+        projectId: String,
+        thumbBitmap: Bitmap?,
+        outputFile: File,
+        filesDir: File,
+        videoUri: String? = null,
+        startTrimMs: Long = 0L,
+        endTrimMs: Long = 8000L,
+        speedMultiplier: Float = 1.0f,
+        customName: String? = null,
+        layers: List<Layer> = emptyList(),
+        canvasWidth: Int = 0,
+        canvasHeight: Int = 0
+    ): Result<StickerProject> {
+        return gifProjectHandler.saveGifProject(
+            projectId = projectId,
+            thumbBitmap = thumbBitmap,
+            outputFile = outputFile,
+            filesDir = filesDir,
+            videoUri = videoUri,
+            startTrimMs = startTrimMs,
+            endTrimMs = endTrimMs,
+            speedMultiplier = speedMultiplier,
+            customName = customName,
+            layers = layers,
+            canvasWidth = canvasWidth,
+            canvasHeight = canvasHeight
+        )
+    }
+
+    suspend fun loadGifProject(projectId: String): Result<StickerProject?> {
+        return gifProjectHandler.getProjectById(projectId)
     }
 
     fun selectStyle(style: StickerStyle, addToHistory: Boolean = true) {
         if (_currentStyle.value == style) return
         _currentStyle.value = style
-
-
 
         if (addToHistory) {
             while (history.size > historyIndex + 1) history.removeAt(history.size - 1)
@@ -131,12 +353,11 @@ class StickerSharedViewModel @Inject constructor(
     }
 
     private fun updateHistoryState() {
-        _historyState.value = Pair(historyIndex > 0, historyIndex < history.size - 1)
+        _historyState.postValue(Pair(historyIndex > 0, historyIndex < history.size - 1))
     }
 
     private fun createCenterFitThumbnail(source: Bitmap, maxSize: Int): Bitmap {
-        // Logic scale ảnh thumbnail...
-        return source.scale(240, 240) // Ví dụ
+        return source.scale(maxSize, maxSize)
     }
 
     fun updateBorderConfig(
@@ -148,31 +369,28 @@ class StickerSharedViewModel @Inject constructor(
         distance?.let { currentBorderDistance.value = it }
         color?.let { currentBorderColor.value = it }
 
-        // Gọi Background Thread xử lý lại ảnh gốc với tham số viền mới
         processNewBorderSticker()
     }
 
     private fun processNewBorderSticker() {
+        borderProcessJob?.cancel()
         val currentSelectedStyle = _currentStyle.value ?: return
 
-        // 1. Xác định LÕI SẠCH dựa trên cái đang chọn
-        // Nếu đang chọn CARTOON -> Lấy lõi CARTOON. Còn ORIGINAL hay BORDER -> Lấy lõi ORIGINAL.
         val baseStyle = if (currentSelectedStyle == StickerStyle.CARTOON) {
             StickerStyle.CARTOON
         } else {
             StickerStyle.ORIGINAL
         }
-        // 2. Lấy bức ảnh sạch chưa có viền ra
         val coreImage = coreBitmaps[baseStyle] ?: return
 
-        viewModelScope.launch {
+        borderProcessJob = viewModelScope.launch {
+            delay(300.milliseconds)
             _isLoading.value = true
             try {
                 val thickness = currentBorderThickness.value ?: 30
                 val distance = currentBorderDistance.value ?: 20
                 val color = currentBorderColor.value ?: Color.WHITE
 
-                // 2. Gọi UseCase (Thread Default/IO đã được xử lý an toàn ở tầng Data)
                 val newBorderImage = applyBorderUseCase(
                     original = coreImage,
                     thickness = thickness,
@@ -180,13 +398,10 @@ class StickerSharedViewModel @Inject constructor(
                     color = color
                 )
 
-                // 4. BƯỚC QUYẾT ĐỊNH: Ghi đè bức ảnh đã vẽ viền vào ĐÚNG cái tab mà User đang đứng
                 styleBitmaps[currentSelectedStyle] = newBorderImage
-
-                // 5. Trigger (kích hoạt) lại LiveData để Activity tự động vẽ lại ảnh MÀ KHÔNG BỊ ĐỔI TAB
                 _currentStyle.value = currentSelectedStyle
             } catch (e: Exception) {
-                // handle error
+                e.printStackTrace()
             } finally {
                 _isLoading.value = false
             }

@@ -82,40 +82,68 @@
             android:visibility="gone"
             app:layout_constraintBottom_toTopOf="@id/buttonRow">
 
-            <Button
-                android:id="@+id/btnToolPoints"
-                android:layout_width="0dp"
-                android:layout_height="44dp"
-                android:layout_weight="1"
-                android:layout_marginEnd="8dp"
-                android:text="Kéo điểm"
-                android:textAllCaps="false"
-                android:textSize="13sp"
-                android:background="@drawable/bg_tool_button" />
-
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnToolBrushAdd"
                 android:layout_width="0dp"
-                android:layout_height="44dp"
+                android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="8dp"
                 android:text="Vẽ thêm"
                 android:textAllCaps="false"
                 android:textSize="13sp"
-                android:background="@drawable/bg_tool_button" />
+                app:icon="@drawable/ic_brush_add"
+                app:iconTint="@color/text_border_100"
+                app:iconSize="24dp"
+                app:iconGravity="top"
+                app:iconPadding="4dp"
+                android:paddingVertical="8dp"
+                android:paddingHorizontal="4dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:background="@drawable/bg_tool_button"
+                app:backgroundTint="@null" />
 
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnToolBrushErase"
                 android:layout_width="0dp"
-                android:layout_height="44dp"
+                android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:layout_marginEnd="8dp"
                 android:text="Tẩy"
                 android:textAllCaps="false"
                 android:textSize="13sp"
-                android:background="@drawable/bg_tool_button" />
+                app:icon="@drawable/ic_eraser"
+                app:iconTint="@color/text_border_100"
+                app:iconSize="24dp"
+                app:iconGravity="top"
+                app:iconPadding="4dp"
+                android:paddingVertical="8dp"
+                android:paddingHorizontal="4dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:background="@drawable/bg_tool_button"
+                app:backgroundTint="@null" />
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnToolPoints"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Kéo điểm"
+                android:textAllCaps="false"
+                android:textSize="13sp"
+                app:icon="@drawable/ic_drag_points"
+                app:iconTint="@color/text_border_100"
+                app:iconSize="24dp"
+                app:iconGravity="top"
+                app:iconPadding="4dp"
+                android:paddingVertical="8dp"
+                android:paddingHorizontal="4dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:background="@drawable/bg_tool_button"
+                app:backgroundTint="@null" />
         </LinearLayout>
-
         <LinearLayout
             android:id="@+id/buttonRow"
             android:layout_width="match_parent"

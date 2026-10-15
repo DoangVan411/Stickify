@@ -2,6 +2,7 @@ package com.jetpack.stickify.domain.usecase
 
 import com.jetpack.stickify.domain.model.ProjectEntity
 import com.jetpack.stickify.domain.repository.ProjectRepository
+import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 
 /**
@@ -12,5 +13,9 @@ class GetRecentProjectsUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(): Result<List<ProjectEntity>> {
         return repository.getRecentProjects()
+    }
+
+    fun getFlow(): Flow<List<ProjectEntity>> {
+        return repository.getRecentProjectsFlow()
     }
 }

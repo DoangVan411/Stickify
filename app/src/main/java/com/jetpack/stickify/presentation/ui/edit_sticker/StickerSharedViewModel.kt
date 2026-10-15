@@ -109,12 +109,8 @@ class StickerSharedViewModel @Inject constructor(
         }
     }
 
-    fun addDecor(resId: Int = 0, bitmap: Bitmap? = null, id: String = UUID.randomUUID().toString()) {
-        val newDecor = when {
-            bitmap != null -> DecorModel(id = id, customBitmap = bitmap)
-            resId != 0 -> DecorModel(id = id, resId = resId)
-            else -> return
-        }
+    fun addDecor(resId: Int = 0, path: String? = null, asset: AssetEntity? = null, bitmap: Bitmap? = null, id: String = UUID.randomUUID().toString()) {
+        val newDecor = DecorModel(id = id, resId = resId, path = path, asset = asset, customBitmap = bitmap)
         val current = _decorList.value.orEmpty().toMutableList()
         current.add(newDecor)
         _decorList.value = current
@@ -131,11 +127,11 @@ class StickerSharedViewModel @Inject constructor(
         _addedDecorEvent.value = newDecor
     }
 
-    fun selectDrawDecor(resId: Int = 0, bitmap: Bitmap? = null) {
-        _drawDecorModeEvent.value = when {
-            resId != 0 -> DecorModel(resId = resId)
-            bitmap != null -> DecorModel(customBitmap = bitmap)
-            else -> null
+    fun selectDrawDecor(resId: Int = 0, path: String? = null, asset: AssetEntity? = null, bitmap: Bitmap? = null) {
+        _drawDecorModeEvent.value = if (resId != 0 || path != null || asset != null || bitmap != null) {
+            DecorModel(resId = resId, path = path, asset = asset, customBitmap = bitmap)
+        } else {
+            null
         }
     }
 

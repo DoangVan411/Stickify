@@ -25,6 +25,8 @@ interface ProjectRepository {
     suspend fun getExploreTemplates(category: ExploreCategory): Result<List<StickerTemplate>>
     suspend fun getTemplateById(templateId: String): Result<StickerTemplate?>
     suspend fun saveTemplate(template: StickerTemplate): Result<Unit>
+    suspend fun toggleTemplateBookmark(templateId: String, isBookmarked: Boolean): Result<Unit>
+    suspend fun removeTemplateFromFavorites(templateId: String): Result<Unit>
 
     // Favorites
     suspend fun getFavoriteStickers(): Result<List<StickerProject>>

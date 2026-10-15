@@ -296,7 +296,7 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
                     return@observe
                 }
                 binding.zoomableView.setDrawDecorBrush(null)
-                val bitmap = decor.customBitmap ?: BitmapFactory.decodeResource(resources, decor.resId)
+                val bitmap = decor.customBitmap ?: decor.path?.let { loadBitmapFromPath(this, it) } ?: (if (decor.resId != 0) BitmapFactory.decodeResource(resources, decor.resId) else null)
                 if (bitmap != null) {
                     binding.zoomableView.addDecorBitmap(bitmap, decor.id)
                 }
@@ -313,9 +313,7 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
                     binding.zoomableView.setDrawDecorBrush(null)
                     showMaxDecorLimitDialog()
                 } else {
-                    val bitmap = decor.customBitmap ?: runCatching {
-                        BitmapFactory.decodeResource(resources, decor.resId)
-                    }.getOrNull() ?: ContextCompat.getDrawable(this, decor.resId)?.toBitmap()
+                    val bitmap = decor.customBitmap ?: decor.path?.let { loadBitmapFromPath(this, it) } ?: (if (decor.resId != 0) BitmapFactory.decodeResource(resources, decor.resId) else null)
                     binding.zoomableView.setDrawDecorBrush(bitmap, decor.id)
                 }
             }
@@ -759,6 +757,29 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
         mediaPlayer?.release()
         mediaPlayer = null
         return true
+    }
+
+    private fun loadBitmapFromPath(context: Context, path: String?): Bitmap? {
+        if (path.isNullOrBlank()) return null
+        return try {
+            context.assets.open(path).use { inputStream ->
+                BitmapFactory.decodeStream(inputStream)
+            }
+        } catch (_: Exception) {
+            try {
+                val file = File(path)
+                if (file.exists()) {
+                    BitmapFactory.decodeFile(file.absolutePath)
+                } else {
+                    val uri = Uri.parse(path)
+                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                        BitmapFactory.decodeStream(inputStream)
+                    }
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
     }
 
     override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) {}

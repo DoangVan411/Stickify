@@ -196,8 +196,8 @@ class ZoomableStickerView @JvmOverloads constructor(
     var onLayerDeleted: ((String) -> Unit)? = null
     /** Người dùng bấm nhân bản: (sourceId, newId, cx, cy). */
     var onLayerDuplicated: ((String, String, Float, Float) -> Unit)? = null
-    /** Kết thúc 1 nét vẽ brush: (bitmap brush, danh sách con dấu). */
-    var onDecorStampsCommitted: ((Bitmap, List<StampSpec>) -> Unit)? = null
+    /** Kết thúc 1 nét vẽ brush: (bitmap brush, assetRef, danh sách con dấu). */
+    var onDecorStampsCommitted: ((Bitmap, AssetRef?, List<StampSpec>) -> Unit)? = null
 
     private var gestureSnapshot: FloatArray? = null
     private var pendingSelectId: String? = null
@@ -217,6 +217,7 @@ class ZoomableStickerView @JvmOverloads constructor(
     private data class DrawDecorBrush(
         val id: String,
         val bitmap: Bitmap,
+        val assetRef: AssetRef? = null,
         val widthRatio: Float = 0.18f,
         val minScaleRatio: Float = 0.85f,
         val maxScaleRatio: Float = 1.25f
@@ -404,8 +405,8 @@ class ZoomableStickerView @JvmOverloads constructor(
         notifyHistoryChanged()
     }
 
-    fun setDrawDecorBrush(bitmap: Bitmap?, id: String = java.util.UUID.randomUUID().toString()) {
-        drawDecorBrush = if (bitmap != null) DrawDecorBrush(id = id, bitmap = bitmap) else null
+    fun setDrawDecorBrush(bitmap: Bitmap?, id: String = UUID.randomUUID().toString(), assetRef: AssetRef? = null) {
+        drawDecorBrush = if (bitmap != null) DrawDecorBrush(id = id, bitmap = bitmap, assetRef = assetRef) else null
         selectedDecor = null
         isDraggingDecor = false
         isDraggingHandle = false
@@ -1801,7 +1802,7 @@ class ZoomableStickerView @JvmOverloads constructor(
                                 layerBitmaps[it.id] = it.bitmap
                                 StampSpec(it.id, it.x, it.y, it.width * it.scale / (cw * 0.45f))
                             }
-                            if (stamps.isNotEmpty()) onDecorStampsCommitted?.invoke(brush.bitmap, stamps)
+                            if (stamps.isNotEmpty()) onDecorStampsCommitted?.invoke(brush.bitmap, brush.assetRef, stamps)
                         } else {
                             drawStrokeHistory.add(currentDrawStrokeIds.toList())
                             preGestureSnapshot?.let {

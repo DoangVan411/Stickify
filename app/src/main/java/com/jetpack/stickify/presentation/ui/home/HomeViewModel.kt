@@ -3,12 +3,14 @@ package com.jetpack.stickify.presentation.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jetpack.stickify.data.source.local.converter.GsonProvider
+import com.jetpack.stickify.domain.model.CustomAsset
 import com.jetpack.stickify.domain.model.ExploreCategory
 import com.jetpack.stickify.domain.model.ProjectContent
 import com.jetpack.stickify.domain.model.ProjectEntity
 import com.jetpack.stickify.domain.model.ProjectType
 import com.jetpack.stickify.domain.model.StickerTemplate
 import com.jetpack.stickify.domain.model.SubjectLayer
+import com.jetpack.stickify.domain.model.Transform
 import com.jetpack.stickify.domain.repository.ProjectRepository
 import com.jetpack.stickify.domain.usecase.GetExploreTemplatesUseCase
 import com.jetpack.stickify.domain.usecase.GetRecentProjectsUseCase
@@ -94,6 +96,20 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun toggleTemplateBookmark(templateId: String, isBookmarked: Boolean, onResult: (Boolean) -> Unit = {}) {
+        try {
+            viewModelScope.launch {
+                projectRepository.toggleTemplateBookmark(templateId, isBookmarked)
+                loadExploreTemplates()
+            }
+            onResult(true)
+        } catch (e: Exception) {
+            onResult(false)
+
+        }
+
+    }
+
     fun deleteProject(projectId: String) {
         viewModelScope.launch {
             projectRepository.deleteProject(projectId)
@@ -151,5 +167,24 @@ class HomeViewModel @Inject constructor(
 
     fun refresh() {
         loadExploreTemplates()
+    }
+
+    fun addTemplateToFavorites(template: StickerTemplate, onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val subjectLayer = SubjectLayer(
+                    id = "layer_subject_main",
+                    transform = Transform(cx = 256f, cy = 256f, scale = 1f),
+                    visible = true,
+                    source = CustomAsset(template.thumbnailUrl),
+                    isTemplatePlaceholder = false
+                )
+                val project = template.instantiate(subjectLayer).copy(isBookmarked = true)
+                val result = projectRepository.saveProject(project)
+                onResult(result.isSuccess)
+            } catch (_: Exception) {
+                onResult(false)
+            }
+        }
     }
 }

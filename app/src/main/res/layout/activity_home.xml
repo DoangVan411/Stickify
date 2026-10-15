@@ -36,9 +36,8 @@
             android:layout_height="56dp"
             android:clickable="true"
             android:focusable="true"
-            app:cardBackgroundColor="#DEFFFFFF"
-            app:cardCornerRadius="28dp"
-            android:padding="1dp">
+            app:cardBackgroundColor="#FFFFFF"
+            app:cardCornerRadius="28dp">
 
             <ImageView
                 android:layout_width="match_parent"
@@ -56,7 +55,7 @@
             android:layout_height="56dp"
             android:layout_marginStart="10dp"
             android:layout_weight="1"
-            app:cardBackgroundColor="#E1FFFFFF"
+            app:cardBackgroundColor="#FFFFFF"
             app:cardCornerRadius="28dp"
             app:cardPreventCornerOverlap="false"
             app:cardUseCompatPadding="false"

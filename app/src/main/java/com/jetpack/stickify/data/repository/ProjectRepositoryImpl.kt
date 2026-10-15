@@ -159,6 +159,24 @@ class ProjectRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun toggleTemplateBookmark(templateId: String, isBookmarked: Boolean): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            templateDao.updateBookmarkStatus(templateId, isBookmarked)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun removeTemplateFromFavorites(templateId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            projectDao.deleteProjectsByTemplateId(templateId)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     override suspend fun getFavoriteStickers(): Result<List<StickerProject>> = withContext(Dispatchers.IO) {
         try {
             val entities = projectDao.getFavoriteProjects()

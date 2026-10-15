@@ -61,16 +61,7 @@ class DecorToolFragment : Fragment() {
         rvDrawnDecor.layoutManager = GridLayoutManager(requireContext(), 4)
         drawnAdapter = DecorAdapter(emptyList(), isSelectable = true) { item ->
             if (drawnAdapter?.getSelectedPosition() != RecyclerView.NO_POSITION) {
-                if (item.resId != 0) {
-                    sharedViewModel.selectDrawDecor(resId = item.resId)
-                } else {
-                    val bitmap = item.bitmap ?: loadBitmapFromPath(requireContext(), item.path)
-                    if (bitmap != null) {
-                        sharedViewModel.selectDrawDecor(bitmap = bitmap)
-                    } else {
-                        sharedViewModel.clearDrawDecor()
-                    }
-                }
+                sharedViewModel.selectDrawDecor(resId = item.resId, path = item.path, asset = item.asset)
             } else {
                 sharedViewModel.clearDrawDecor()
             }
@@ -85,15 +76,8 @@ class DecorToolFragment : Fragment() {
             sharedViewModel.clearDrawDecor()
             if (item.isImportAction) {
                 pickImageLauncher.launch("image/*")
-            } else if (item.resId != 0) {
-                sharedViewModel.addDecor(resId = item.resId, id = item.id)
             } else {
-                val bitmap = item.bitmap ?: loadBitmapFromPath(requireContext(), item.path)
-                if (bitmap != null) {
-                    sharedViewModel.addDecor(bitmap = bitmap, id = item.id)
-                } else {
-                    Toast.makeText(context, "Không thể tải nhãn", Toast.LENGTH_SHORT).show()
-                }
+                sharedViewModel.addDecor(resId = item.resId, path = item.path, asset = item.asset, id = item.id)
             }
         }
         rvLabels.adapter = labelAdapter
@@ -107,7 +91,8 @@ class DecorToolFragment : Fragment() {
                     id = asset.id,
                     name = asset.title,
                     resId = resId,
-                    path = asset.path
+                    path = asset.path,
+                    asset = asset
                 )
             }
             drawnAdapter?.updateItems(items)
@@ -123,7 +108,8 @@ class DecorToolFragment : Fragment() {
                     id = asset.id,
                     name = asset.title,
                     resId = resId,
-                    path = asset.path
+                    path = asset.path,
+                    asset = asset
                 )
             })
             labelAdapter?.updateItems(items)

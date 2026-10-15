@@ -19,6 +19,7 @@ import com.jetpack.stickify.R
 import com.jetpack.stickify.databinding.FragmentHomeBinding
 import com.jetpack.stickify.data.source.local.converter.ProjectConverters
 import com.jetpack.stickify.domain.model.ExploreCategory
+import com.jetpack.stickify.domain.model.ProjectEntity
 import com.jetpack.stickify.domain.model.ProjectType
 import com.jetpack.stickify.presentation.ui.edit_gif.GifEditActivity
 import com.jetpack.stickify.presentation.ui.edit_sticker.StickerEditActivity
@@ -31,6 +32,7 @@ import com.jetpack.stickify.presentation.ui.home.adapter.RecentAction
 import com.jetpack.stickify.presentation.ui.home.adapter.RecentProjectAdapter
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * Fragment chính hiển thị HomeScreen.
@@ -94,77 +96,10 @@ class HomeFragment : Fragment() {
         // Recent Projects - Horizontal (vừa vặn 3 item trên màn hình)
         recentAdapter = RecentProjectAdapter(
             onItemClick = { project ->
-                when (project.type) {
-                    ProjectType.GIF -> {
-                        val content = project.contentJson?.let {
-                            ProjectConverters().toProjectContent(it)
-                        }
-                        val videoUriStr = content?.playback?.videoUri
-                        val startTrimMs = content?.playback?.startTrimMs ?: 0L
-                        val endTrimMs = content?.playback?.endTrimMs ?: 8000L
-                        val speed = content?.playback?.speed?.multiplier?.toFloat() ?: 1.0f
-
-                        val videoUri = videoUriStr?.let { Uri.parse(it) }
-
-                        if (videoUri != null) {
-                            val intent = Intent(requireContext(), GifEditActivity::class.java).apply {
-                                putExtra(GifEditActivity.EXTRA_VIDEO_URI, videoUri)
-                                putExtra(GifEditActivity.EXTRA_START_MS, startTrimMs)
-                                putExtra(GifEditActivity.EXTRA_END_MS, endTrimMs)
-                                putExtra(GifEditActivity.EXTRA_SPEED, speed)
-                                putExtra(GifEditActivity.EXTRA_PROJECT_ID, project.id)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            }
-                            startActivity(intent)
-                        } else {
-                            // Dự án cũ chưa có videoUri -> mở màn hình xem trước / quản lý
-                            val file = project.exportedPath?.let { java.io.File(it) }?.takeIf { it.exists() }
-                                ?: java.io.File(project.thumbnailPath).takeIf { it.exists() }
-                            val fileUri = file?.let { Uri.fromFile(it) }
-
-                            val intent = Intent(requireContext(), StickerPreviewActivity::class.java).apply {
-                                fileUri?.let {
-                                    data = it
-                                    putExtra(StickerPreviewActivity.EXTRA_STICKER_URI, it)
-                                }
-                                putExtra(StickerPreviewActivity.EXTRA_PROJECT_ID, project.id)
-                                putExtra(StickerPreviewActivity.EXTRA_IS_ANIMATED, true)
-                                putExtra(StickerPreviewActivity.EXTRA_IS_BOOKMARKED, project.isBookmarked)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            }
-                            startActivity(intent)
-                        }
-                    }
-                    ProjectType.STICKER, ProjectType.ANIMATED_STICKER -> {
-                        val intent = Intent(requireContext(), StickerEditActivity::class.java).apply {
-                            putExtra(StickerEditActivity.EXTRA_PROJECT_ID, project.id)
-                        }
-                        startActivity(intent)
-                    }
-                }
+                openProject(project)
             },
             onActionClick = { project, action ->
-                when (action) {
-                    RecentAction.TOGGLE_FAVORITE -> {
-                        viewModel.toggleBookmark(project.id, !project.isBookmarked)
-                        val msg = if (!project.isBookmarked) "Đã thêm vào yêu thích" else "Đã xóa khỏi yêu thích"
-                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                    }
-                    RecentAction.RENAME -> {
-                        val dialog = EditNameDialogFragment.newInstance(project.id, project.name)
-                        dialog.show(childFragmentManager, EditNameDialogFragment.TAG)
-                    }
-                    RecentAction.ADD_TO_EXPLORE -> {
-                        viewModel.addToExplore(project) { success ->
-                            val msg = if (success) "Đã thêm vào mục Khám phá!" else "Lỗi khi thêm vào khám phá"
-                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    RecentAction.DELETE -> {
-                        val dialog = ConfirmDeleteProjectDialogFragment.newInstance(project.id, project.name)
-                        dialog.show(childFragmentManager, ConfirmDeleteProjectDialogFragment.TAG)
-                    }
-                }
+                handleRecentAction(project, action)
             }
         )
         val spacePx = resources.getDimensionPixelSize(R.dimen.spacing_sm)
@@ -195,7 +130,18 @@ class HomeFragment : Fragment() {
                 startActivity(intent)
             },
             onFavoriteClick = { template ->
-                // TODO: Toggle favorite
+//
+//                viewModel.addTemplateToFavorites(template) { success ->
+//                    val msg = if (success) "Đã thêm vào mục yêu thích!" else "Lỗi khi thêm vào yêu thích"
+//                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+//                }
+                viewModel.toggleTemplateBookmark(template.id,!template.isBookmarked){
+                    success ->
+                    val msg = if (success && template.isBookmarked) "Đã xóa khỏi mục yêu thích!"
+                    else if (success) "Đã thêm vào mục yêu thích!"
+                    else "Lỗi khi thao tác"
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
             }
         )
         binding.rvExploreTemplates.apply {
@@ -225,7 +171,89 @@ class HomeFragment : Fragment() {
         }
 
         binding.tvSeeAll.setOnClickListener {
-            // TODO: Navigate to all projects
+            val projects = viewModel.uiState.value.recentProjects
+            val dialog = AllRecentProjectsBottomSheetDialogFragment.newInstance(projects)
+            dialog.onItemClick = { project ->
+                openProject(project)
+            }
+            dialog.onActionClick = { project, action ->
+                handleRecentAction(project, action)
+            }
+            dialog.show(childFragmentManager, AllRecentProjectsBottomSheetDialogFragment.TAG)
+        }
+    }
+
+    private fun openProject(project: ProjectEntity) {
+        when (project.type) {
+            ProjectType.GIF -> {
+                val content = project.contentJson?.let {
+                    ProjectConverters().toProjectContent(it)
+                }
+                val videoUriStr = content?.playback?.videoUri
+                val startTrimMs = content?.playback?.startTrimMs ?: 0L
+                val endTrimMs = content?.playback?.endTrimMs ?: 8000L
+                val speed = content?.playback?.speed?.multiplier?.toFloat() ?: 1.0f
+
+                val videoUri = videoUriStr?.let { Uri.parse(it) }
+
+                if (videoUri != null) {
+                    val intent = Intent(requireContext(), GifEditActivity::class.java).apply {
+                        putExtra(GifEditActivity.EXTRA_VIDEO_URI, videoUri)
+                        putExtra(GifEditActivity.EXTRA_START_MS, startTrimMs)
+                        putExtra(GifEditActivity.EXTRA_END_MS, endTrimMs)
+                        putExtra(GifEditActivity.EXTRA_SPEED, speed)
+                        putExtra(GifEditActivity.EXTRA_PROJECT_ID, project.id)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    startActivity(intent)
+                } else {
+                    val file = project.exportedPath?.let { File(it) }?.takeIf { it.exists() }
+                        ?: File(project.thumbnailPath).takeIf { it.exists() }
+                    val fileUri = file?.let { Uri.fromFile(it) }
+
+                    val intent = Intent(requireContext(), StickerPreviewActivity::class.java).apply {
+                        fileUri?.let {
+                            data = it
+                            putExtra(StickerPreviewActivity.EXTRA_STICKER_URI, it)
+                        }
+                        putExtra(StickerPreviewActivity.EXTRA_PROJECT_ID, project.id)
+                        putExtra(StickerPreviewActivity.EXTRA_IS_ANIMATED, true)
+                        putExtra(StickerPreviewActivity.EXTRA_IS_BOOKMARKED, project.isBookmarked)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    startActivity(intent)
+                }
+            }
+            ProjectType.STICKER, ProjectType.ANIMATED_STICKER -> {
+                val intent = Intent(requireContext(), StickerEditActivity::class.java).apply {
+                    putExtra(StickerEditActivity.EXTRA_PROJECT_ID, project.id)
+                }
+                startActivity(intent)
+            }
+        }
+    }
+
+    private fun handleRecentAction(project: ProjectEntity, action: RecentAction) {
+        when (action) {
+            RecentAction.TOGGLE_FAVORITE -> {
+                viewModel.toggleBookmark(project.id, !project.isBookmarked)
+                val msg = if (!project.isBookmarked) "Đã thêm vào yêu thích" else "Đã xóa khỏi yêu thích"
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            }
+            RecentAction.RENAME -> {
+                val dialog = EditNameDialogFragment.newInstance(project.id, project.name)
+                dialog.show(childFragmentManager, EditNameDialogFragment.TAG)
+            }
+            RecentAction.ADD_TO_EXPLORE -> {
+                viewModel.addToExplore(project) { success ->
+                    val msg = if (success) "Đã thêm vào mục Khám phá!" else "Lỗi khi thêm vào khám phá"
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            }
+            RecentAction.DELETE -> {
+                val dialog = ConfirmDeleteProjectDialogFragment.newInstance(project.id, project.name)
+                dialog.show(childFragmentManager, ConfirmDeleteProjectDialogFragment.TAG)
+            }
         }
     }
 

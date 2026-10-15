@@ -1,5 +1,6 @@
 package com.jetpack.stickify.presentation.ui.home.adapter
 
+import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -76,6 +77,13 @@ class ExploreTemplateAdapter(
                 .placeholder(R.drawable.ic_sticker_cat)
                 .error(R.drawable.ic_sticker_cat)
                 .into(ivThumbnail)
+
+            val bookmarkTint = if (template.isBookmarked) {
+                ContextCompat.getColor(itemView.context, R.color.colorPrimary)
+            } else {
+                ContextCompat.getColor(itemView.context, android.R.color.darker_gray)
+            }
+            ivFavorite.imageTintList = ColorStateList.valueOf(bookmarkTint)
 
             ivFavorite.setOnClickListener { onFavoriteClick(template) }
             itemView.setOnClickListener { onItemClick(template) }

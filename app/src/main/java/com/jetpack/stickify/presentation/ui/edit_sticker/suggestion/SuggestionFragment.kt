@@ -10,10 +10,12 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import com.jetpack.stickify.R
 import com.jetpack.stickify.domain.model.StickerStyle
 import com.jetpack.stickify.presentation.ui.edit_sticker.StickerSharedViewModel
 import androidx.fragment.app.activityViewModels
+import com.jetpack.stickify.presentation.ui.edit_sticker.StickerEditActivity
 
 
 class SuggestionFragment : Fragment() {
@@ -75,7 +77,14 @@ class SuggestionFragment : Fragment() {
 
             // Gửi action chọn Style về lại ViewModel (Tham số true = add vào history)
             itemView.setOnClickListener {
-                sharedViewModel.selectStyle(style, addToHistory = true)
+                val act = activity as? StickerEditActivity
+                if (act?.isProjectMode == true) {
+                    if (act.hasAiAnimation()) {
+                        Toast.makeText(context, "Không áp dụng đề xuất với ticker AI", Toast.LENGTH_SHORT).show()
+                    } else {
+                        sharedViewModel.selectStyle(style, addToHistory = true)
+                    }
+                }
             }
 
             styleItemViews[style] = itemView

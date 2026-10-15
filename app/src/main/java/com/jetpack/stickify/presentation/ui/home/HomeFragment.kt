@@ -95,7 +95,7 @@ class HomeFragment : Fragment() {
         recentAdapter = RecentProjectAdapter(
             onItemClick = { project ->
                 when (project.type) {
-                    ProjectType.GIF, ProjectType.ANIMATED_STICKER -> {
+                    ProjectType.GIF -> {
                         val content = project.contentJson?.let {
                             ProjectConverters().toProjectContent(it)
                         }
@@ -135,7 +135,7 @@ class HomeFragment : Fragment() {
                             startActivity(intent)
                         }
                     }
-                    ProjectType.STICKER -> {
+                    ProjectType.STICKER, ProjectType.ANIMATED_STICKER -> {
                         val intent = Intent(requireContext(), StickerEditActivity::class.java).apply {
                             putExtra(StickerEditActivity.EXTRA_PROJECT_ID, project.id)
                         }

@@ -1,5 +1,7 @@
 package com.jetpack.stickify.presentation.ui.edit_sticker.decor
 
+import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
@@ -14,30 +16,13 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.jetpack.stickify.R
 import com.jetpack.stickify.presentation.ui.edit_sticker.StickerSharedViewModel
+import dagger.hilt.android.AndroidEntryPoint
+import java.io.File
 
+@AndroidEntryPoint
 class DecorToolFragment : Fragment() {
 
     private val sharedViewModel: StickerSharedViewModel by activityViewModels()
-
-    // 1. Danh sách "Vẽ trang trí" (4 items hàng đầu)
-    private val drawnDecorItems = listOf(
-        DecorItem("decor_1", "Lấp lánh", R.drawable.img_decor_1),
-        DecorItem("decor_2", "Trái tim", R.drawable.img_decor_2),
-        DecorItem("decor_3", "Hoa", R.drawable.img_decor_3),
-        DecorItem("decor_4", "Vương miện", R.drawable.img_decor_4)
-    )
-
-    // 2. Danh sách "Nhãn" (Gồm nút thêm ảnh + các nhãn dán như YEAH, OMG)
-    private val labelItems = listOf(
-        DecorItem("import", "Thêm ảnh", R.drawable.img_import, isImportAction = true),
-        DecorItem("decor_5", "Yeah", R.drawable.img_decor_5),
-        DecorItem("decor_6", "OMG", R.drawable.img_decor_6),
-        DecorItem("decor_7", "Yeah 2", R.drawable.img_decor_7),
-        DecorItem("decor_8", "OMG 2", R.drawable.img_decor_8),
-        DecorItem("decor_5_2", "Yeah 3", R.drawable.img_decor_5),
-        DecorItem("decor_6_2", "OMG 3", R.drawable.img_decor_6),
-        DecorItem("decor_7_2", "Yeah 4", R.drawable.img_decor_7)
-    )
 
     // Launcher mở thư viện ảnh khi nhấn vào nút Nhãn thêm ảnh (Dashed card)
     private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -74,9 +59,18 @@ class DecorToolFragment : Fragment() {
         // 1. Cài đặt Grid cho Vẽ trang trí
         val rvDrawnDecor: RecyclerView = view.findViewById(R.id.rvDrawnDecor)
         rvDrawnDecor.layoutManager = GridLayoutManager(requireContext(), 4)
-        drawnAdapter = DecorAdapter(drawnDecorItems, isSelectable = true) { item ->
+        drawnAdapter = DecorAdapter(emptyList(), isSelectable = true) { item ->
             if (drawnAdapter?.getSelectedPosition() != RecyclerView.NO_POSITION) {
-                sharedViewModel.selectDrawDecor(item.resId)
+                if (item.resId != 0) {
+                    sharedViewModel.selectDrawDecor(resId = item.resId)
+                } else {
+                    val bitmap = item.bitmap ?: loadBitmapFromPath(requireContext(), item.path)
+                    if (bitmap != null) {
+                        sharedViewModel.selectDrawDecor(bitmap = bitmap)
+                    } else {
+                        sharedViewModel.clearDrawDecor()
+                    }
+                }
             } else {
                 sharedViewModel.clearDrawDecor()
             }
@@ -86,15 +80,78 @@ class DecorToolFragment : Fragment() {
         // 2. Cài đặt Grid cho Nhãn
         val rvLabels: RecyclerView = view.findViewById(R.id.rvLabels)
         rvLabels.layoutManager = GridLayoutManager(requireContext(), 4)
-        labelAdapter = DecorAdapter(labelItems, isSelectable = false) { item ->
+        labelAdapter = DecorAdapter(emptyList(), isSelectable = false) { item ->
             drawnAdapter?.clearSelection()
             sharedViewModel.clearDrawDecor()
             if (item.isImportAction) {
                 pickImageLauncher.launch("image/*")
+            } else if (item.resId != 0) {
+                sharedViewModel.addDecor(resId = item.resId, id = item.id)
             } else {
-                sharedViewModel.addDecor(item.resId, item.id)
+                val bitmap = item.bitmap ?: loadBitmapFromPath(requireContext(), item.path)
+                if (bitmap != null) {
+                    sharedViewModel.addDecor(bitmap = bitmap, id = item.id)
+                } else {
+                    Toast.makeText(context, "Không thể tải nhãn", Toast.LENGTH_SHORT).show()
+                }
             }
         }
         rvLabels.adapter = labelAdapter
+
+        // Lấy danh sách trang trí và nhãn từ bảng Asset qua ViewModel
+        sharedViewModel.decorationAssets.observe(viewLifecycleOwner) { assets ->
+            val context = context ?: return@observe
+            val items = assets.map { asset ->
+                val resId = context.resources.getIdentifier(asset.path, "drawable", context.packageName)
+                DecorItem(
+                    id = asset.id,
+                    name = asset.title,
+                    resId = resId,
+                    path = asset.path
+                )
+            }
+            drawnAdapter?.updateItems(items)
+        }
+
+        sharedViewModel.labelAssets.observe(viewLifecycleOwner) { assets ->
+            val context = context ?: return@observe
+            val importItem = DecorItem("import", "Thêm ảnh", R.drawable.img_import, isImportAction = true)
+            val items = mutableListOf(importItem)
+            items.addAll(assets.map { asset ->
+                val resId = context.resources.getIdentifier(asset.path, "drawable", context.packageName)
+                DecorItem(
+                    id = asset.id,
+                    name = asset.title,
+                    resId = resId,
+                    path = asset.path
+                )
+            })
+            labelAdapter?.updateItems(items)
+        }
+
+        sharedViewModel.loadAssets()
+    }
+
+    private fun loadBitmapFromPath(context: Context, path: String?): Bitmap? {
+        if (path.isNullOrBlank()) return null
+        return try {
+            context.assets.open(path).use { inputStream ->
+                BitmapFactory.decodeStream(inputStream)
+            }
+        } catch (_: Exception) {
+            try {
+                val file = File(path)
+                if (file.exists()) {
+                    BitmapFactory.decodeFile(file.absolutePath)
+                } else {
+                    val uri = Uri.parse(path)
+                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                        BitmapFactory.decodeStream(inputStream)
+                    }
+                }
+            } catch (_: Exception) {
+                null
+            }
+        }
     }
 }

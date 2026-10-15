@@ -83,10 +83,10 @@ class StickerEditViewModel @Inject constructor(
     // Danh sách nhãn (Labels / Stickers)
     private val _labelDecorations = MutableStateFlow(
         listOf(
-            BuiltinAsset("ic_sample_01.png", "pack_comic"),
-            BuiltinAsset("ic_sample_02.png", "pack_comic"),
-            BuiltinAsset("ic_sample_03.png", "pack_comic"),
-            BuiltinAsset("ic_sample_04.png", "pack_comic"),
+            BuiltinAsset("st_plant.png", "pack_comic"),
+            BuiltinAsset("st_star.png", "pack_comic"),
+            BuiltinAsset("st_universe.png", "pack_comic"),
+            BuiltinAsset("st_alien.png", "pack_comic"),
             BuiltinAsset("heart.png", "pack_more"),
             BuiltinAsset("img_decorate_01.png", "pack_more")
         )

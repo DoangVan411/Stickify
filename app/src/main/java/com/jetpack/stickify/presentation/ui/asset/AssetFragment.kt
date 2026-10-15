@@ -177,7 +177,8 @@ class AssetFragment : Fragment() {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
                     // 1. Backgrounds
-                    val bgAdapter = AssetAdapter(state.backgrounds,
+                    val sortedBgs = state.backgrounds.sortedByDescending { it.createdAt }
+                    val bgAdapter = AssetAdapter(sortedBgs,
                         onAddClick = {
                             targetAddCategory = "BACKGROUND"
                             pickImageLauncher.launch("image/*")
@@ -192,8 +193,10 @@ class AssetFragment : Fragment() {
                     rvBackgrounds.layoutManager = LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false)
                     rvBackgrounds.adapter = bgAdapter
 
-                    // 2. Decorations
-                    val decAdapter = AssetAdapter(state.decorations,
+                    // 2. Decorations (Tối đa 6 item hiển thị, item mới lên trước)
+                    val sortedDecors = state.decorations.sortedByDescending { it.createdAt }
+                    val displayDecors = sortedDecors.take(5)
+                    val decAdapter = AssetAdapter(displayDecors,
                         onAddClick = {
                             targetAddCategory = "DECORATION"
                             pickImageLauncher.launch("image/*")
@@ -209,8 +212,25 @@ class AssetFragment : Fragment() {
                     rvDecorations.isNestedScrollingEnabled = false
                     rvDecorations.adapter = decAdapter
 
-                    // 3. Labels
-                    val lblAdapter = AssetAdapter(state.labels,
+                    tvDecorSeeAll.setOnClickListener {
+                        val dialog = AllAssetsBottomSheetDialogFragment.newInstance("Tất cả trang trí", sortedDecors)
+                        dialog.onAddClick = {
+                            targetAddCategory = "DECORATION"
+                            pickImageLauncher.launch("image/*")
+                        }
+                        dialog.onItemClick = { asset ->
+                            Toast.makeText(context, "Đã chọn trang trí: ${asset.title}", Toast.LENGTH_SHORT).show()
+                        }
+                        dialog.onItemLongClick = { asset, v ->
+                            startDragAsset(asset, v)
+                        }
+                        dialog.show(childFragmentManager, AllAssetsBottomSheetDialogFragment.TAG)
+                    }
+
+                    // 3. Labels (Tối đa 6 item hiển thị, item mới lên trước)
+                    val sortedLabels = state.labels.sortedByDescending { it.createdAt }
+                    val displayLabels = sortedLabels.take(5)
+                    val lblAdapter = AssetAdapter(displayLabels,
                         onAddClick = {
                             targetAddCategory = "LABEL"
                             pickImageLauncher.launch("image/*")
@@ -225,6 +245,21 @@ class AssetFragment : Fragment() {
                     rvLabels.layoutManager = GridLayoutManager(context, 3)
                     rvLabels.isNestedScrollingEnabled = false
                     rvLabels.adapter = lblAdapter
+
+                    tvLabelSeeAll.setOnClickListener {
+                        val dialog = AllAssetsBottomSheetDialogFragment.newInstance("Tất cả nhãn", sortedLabels)
+                        dialog.onAddClick = {
+                            targetAddCategory = "LABEL"
+                            pickImageLauncher.launch("image/*")
+                        }
+                        dialog.onItemClick = { asset ->
+                            Toast.makeText(context, "Đã chọn nhãn: ${asset.title}", Toast.LENGTH_SHORT).show()
+                        }
+                        dialog.onItemLongClick = { asset, v ->
+                            startDragAsset(asset, v)
+                        }
+                        dialog.show(childFragmentManager, AllAssetsBottomSheetDialogFragment.TAG)
+                    }
                 }
             }
         }

@@ -67,14 +67,19 @@ class AssetAdapter(
             val resId = when (asset.path) {
                 "bg_transparent" -> R.drawable.ic_placeholder_explore_1
                 "bg_gradient_pastel" -> R.drawable.img_background
-                else -> 0
+                else -> itemView.context.resources.getIdentifier(asset.path, "drawable", itemView.context.packageName)
             }
 
             if (resId != 0) {
                 ivThumb.setImageResource(resId)
             } else {
+                val glidePath = if (asset.path.startsWith("file://") || asset.path.startsWith("content://") || asset.path.startsWith("/")) {
+                    asset.path
+                } else {
+                    "file:///android_asset/${asset.path}"
+                }
                 Glide.with(itemView.context)
-                    .load(asset.path)
+                    .load(glidePath)
                     .placeholder(R.drawable.ic_sticker_cat)
                     .into(ivThumb)
             }

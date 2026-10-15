@@ -48,6 +48,7 @@ import com.jetpack.stickify.domain.model.TextLayer
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextInputOverlayController
 import com.jetpack.stickify.presentation.ui.edit_sticker.text.TextStyleSpec
 import com.jetpack.stickify.presentation.ui.edit_sticker.cancel.SaveConfirmDialogFragment
+import com.jetpack.stickify.presentation.ui.edit_sticker.decor.MaxDecorLimitDialogFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.prompt_sticker.AiHistoryResult
 import com.jetpack.stickify.presentation.ui.edit_sticker.prompt_sticker.EditSpan
 import com.jetpack.stickify.presentation.ui.edit_sticker.utils.PromptKeyboardAdjuster
@@ -385,6 +386,16 @@ class StickerEditActivity : AppCompatActivity() {
         // Thêm decor khi người dùng chọn trong DecorToolFragment
         sharedViewModel.addedDecorEvent.observe(this) { decor ->
             if (decor != null) {
+                val currentDecorCount = if (isProjectMode) {
+                    editViewModel.uiState.value.editorSession.content.layers.count { it !is SubjectLayer }
+                } else {
+                    binding.zoomableView.getDecorCount()
+                }
+                if (currentDecorCount >= binding.zoomableView.maxDecorLimit) {
+                    binding.zoomableView.setDrawDecorBrush(null)
+                    showMaxDecorLimitDialog()
+                    return@observe
+                }
                 binding.zoomableView.setDrawDecorBrush(null)
                 val bitmap = decor.customBitmap ?: BitmapFactory.decodeResource(resources, decor.resId)
                 if (bitmap != null) {
@@ -405,10 +416,20 @@ class StickerEditActivity : AppCompatActivity() {
             if (decor == null) {
                 binding.zoomableView.setDrawDecorBrush(null)
             } else {
-                val bitmap = decor.customBitmap ?: runCatching {
-                    BitmapFactory.decodeResource(resources, decor.resId)
-                }.getOrNull() ?: ContextCompat.getDrawable(this, decor.resId)?.toBitmap()
-                binding.zoomableView.setDrawDecorBrush(bitmap, decor.id)
+                val currentDecorCount = if (isProjectMode) {
+                    editViewModel.uiState.value.editorSession.content.layers.count { it !is SubjectLayer }
+                } else {
+                    binding.zoomableView.getDecorCount()
+                }
+                if (currentDecorCount >= binding.zoomableView.maxDecorLimit) {
+                    binding.zoomableView.setDrawDecorBrush(null)
+                    showMaxDecorLimitDialog()
+                } else {
+                    val bitmap = decor.customBitmap ?: runCatching {
+                        BitmapFactory.decodeResource(resources, decor.resId)
+                    }.getOrNull() ?: ContextCompat.getDrawable(this, decor.resId)?.toBitmap()
+                    binding.zoomableView.setDrawDecorBrush(bitmap, decor.id)
+                }
             }
         }
 
@@ -650,7 +671,24 @@ class StickerEditActivity : AppCompatActivity() {
         setupDoubleTapToEditText()
     }
 
+    private fun showMaxDecorLimitDialog() {
+        if (supportFragmentManager.findFragmentByTag(MaxDecorLimitDialogFragment.TAG) != null) return
+        MaxDecorLimitDialogFragment.newInstance()
+            .show(supportFragmentManager, MaxDecorLimitDialogFragment.TAG)
+    }
+
     private fun applyTextResult(result: TextInputOverlayController.TextEditResult) {
+        if (result.layerId == null) {
+            val currentDecorCount = if (isProjectMode) {
+                editViewModel.uiState.value.editorSession.content.layers.count { it !is SubjectLayer }
+            } else {
+                binding.zoomableView.getDecorCount()
+            }
+            if (currentDecorCount >= binding.zoomableView.maxDecorLimit) {
+                showMaxDecorLimitDialog()
+                return
+            }
+        }
         if (isProjectMode) {
             // Project: chữ là TextLayer (có Undo/Redo, được lưu vào DB, kèm font + nền/viền)
             val id = result.layerId
@@ -669,6 +707,9 @@ class StickerEditActivity : AppCompatActivity() {
     }
 
     private fun setupDoubleTapToEditText() {
+        binding.zoomableView.onMaxDecorLimitReached = {
+            showMaxDecorLimitDialog()
+        }
         // Layer decor/chữ của project: kéo/xoay/phóng/xóa/nhân bản -> ghi vào lịch sử qua ViewModel
         binding.zoomableView.onLayerTransformed = { id, cx, cy, scale, rotation ->
             if (isProjectMode) editViewModel.updateLayerTransform(id, cx, cy, scale, rotation)

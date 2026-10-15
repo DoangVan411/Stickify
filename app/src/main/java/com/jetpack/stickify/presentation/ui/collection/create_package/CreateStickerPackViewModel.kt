@@ -6,7 +6,6 @@ import com.jetpack.stickify.domain.model.StickerPack
 import com.jetpack.stickify.domain.model.StickerProject
 import com.jetpack.stickify.domain.repository.ProjectRepository
 import com.jetpack.stickify.domain.usecase.CreateStickerPackUseCase
-import com.jetpack.stickify.domain.usecase.GetFavoritesUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,7 +23,6 @@ data class CreateStickerPackUiState(
 @HiltViewModel
 class CreateStickerPackViewModel @Inject constructor(
     private val createStickerPackUseCase: CreateStickerPackUseCase,
-    private val getFavoritesUseCase: GetFavoritesUseCase,
     private val projectRepository: ProjectRepository
 ) : ViewModel() {
 
@@ -41,11 +39,12 @@ class CreateStickerPackViewModel @Inject constructor(
     fun loadAvailableStickers(onLoaded: (List<StickerProject>) -> Unit = {}) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            val result = getFavoritesUseCase()
-            result.onSuccess { stickers ->
-                _uiState.update { it.copy(availableStickers = stickers, isLoading = false) }
-                onLoaded(stickers)
-            }.onFailure {
+            try {
+                projectRepository.getAllProjects().collect { stickers ->
+                    _uiState.update { it.copy(availableStickers = stickers, isLoading = false) }
+                    onLoaded(stickers)
+                }
+            } catch (_: Exception) {
                 _uiState.update { it.copy(isLoading = false) }
                 onLoaded(emptyList())
             }

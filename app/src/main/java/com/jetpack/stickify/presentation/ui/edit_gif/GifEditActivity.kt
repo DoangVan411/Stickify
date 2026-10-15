@@ -34,6 +34,7 @@ import com.jetpack.stickify.domain.model.TextAlign
 import com.jetpack.stickify.presentation.ui.edit_sticker.StickerPreviewActivity
 import com.jetpack.stickify.presentation.ui.edit_sticker.StickerSharedViewModel
 import com.jetpack.stickify.presentation.ui.edit_sticker.cancel.SaveConfirmDialogFragment
+import com.jetpack.stickify.presentation.ui.edit_sticker.decor.MaxDecorLimitDialogFragment
 import com.jetpack.stickify.presentation.ui.edit_sticker.custom_view.EditorPanelView
 import com.jetpack.stickify.presentation.ui.edit_sticker.custom_view.TabItem
 import com.jetpack.stickify.presentation.ui.edit_sticker.decor.DecorToolFragment
@@ -274,11 +275,26 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
         }
     }
 
+    private fun showMaxDecorLimitDialog() {
+        if (supportFragmentManager.findFragmentByTag(MaxDecorLimitDialogFragment.TAG) != null) return
+        MaxDecorLimitDialogFragment.newInstance()
+            .show(supportFragmentManager, MaxDecorLimitDialogFragment.TAG)
+    }
+
     private fun setupObservers() {
+        binding.zoomableView.onMaxDecorLimitReached = {
+            showMaxDecorLimitDialog()
+        }
+
         // Nhận sự kiện thêm Decor từ DecorToolFragment
         sharedViewModel.addedDecorEvent.observe(this) { decor ->
             if (decor != null) {
                 if (videoWidth <= 0 || videoHeight <= 0) return@observe
+                if (binding.zoomableView.getDecorCount() >= binding.zoomableView.maxDecorLimit) {
+                    binding.zoomableView.setDrawDecorBrush(null)
+                    showMaxDecorLimitDialog()
+                    return@observe
+                }
                 binding.zoomableView.setDrawDecorBrush(null)
                 val bitmap = decor.customBitmap ?: BitmapFactory.decodeResource(resources, decor.resId)
                 if (bitmap != null) {
@@ -293,10 +309,15 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
                 binding.zoomableView.setDrawDecorBrush(null)
             } else {
                 if (videoWidth <= 0 || videoHeight <= 0) return@observe
-                val bitmap = decor.customBitmap ?: runCatching {
-                    BitmapFactory.decodeResource(resources, decor.resId)
-                }.getOrNull() ?: ContextCompat.getDrawable(this, decor.resId)?.toBitmap()
-                binding.zoomableView.setDrawDecorBrush(bitmap, decor.id)
+                if (binding.zoomableView.getDecorCount() >= binding.zoomableView.maxDecorLimit) {
+                    binding.zoomableView.setDrawDecorBrush(null)
+                    showMaxDecorLimitDialog()
+                } else {
+                    val bitmap = decor.customBitmap ?: runCatching {
+                        BitmapFactory.decodeResource(resources, decor.resId)
+                    }.getOrNull() ?: ContextCompat.getDrawable(this, decor.resId)?.toBitmap()
+                    binding.zoomableView.setDrawDecorBrush(bitmap, decor.id)
+                }
             }
         }
     }
@@ -305,6 +326,10 @@ class GifEditActivity : AppCompatActivity(), TextureView.SurfaceTextureListener 
         textController = TextInputOverlayController(binding.addTextLayout) { result ->
             if (result != null) {
                 if (videoWidth <= 0 || videoHeight <= 0) return@TextInputOverlayController
+                if (result.layerId == null && binding.zoomableView.getDecorCount() >= binding.zoomableView.maxDecorLimit) {
+                    showMaxDecorLimitDialog()
+                    return@TextInputOverlayController
+                }
                 binding.zoomableView.addTextItem(
                     text = result.text,
                     textColor = result.colorArgb,

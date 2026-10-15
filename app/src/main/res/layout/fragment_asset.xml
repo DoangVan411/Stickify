@@ -76,8 +76,9 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:clipToPadding="false"
-                android:orientation="horizontal"
-                android:paddingHorizontal="16dp"
+                android:orientation="vertical"
+                app:spanCount="3"
+                android:paddingStart="12dp"
                 app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
                 tools:listitem="@layout/item_asset_card" />
 
@@ -115,8 +116,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:clipToPadding="false"
-                android:orientation="horizontal"
-                android:paddingHorizontal="16dp"
+                android:orientation="vertical"
+                android:paddingStart="12dp"
                 app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
                 tools:listitem="@layout/item_asset_card" />
 

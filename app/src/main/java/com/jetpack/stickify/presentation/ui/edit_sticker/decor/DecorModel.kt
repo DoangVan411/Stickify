@@ -33,6 +33,8 @@ data class DecorModel(
 data class DecorItem(
     val id: String,
     val name: String,
-    val resId: Int,
+    val resId: Int = 0,
+    val path: String? = null,
+    val bitmap: Bitmap? = null,
     val isImportAction: Boolean = false
 )

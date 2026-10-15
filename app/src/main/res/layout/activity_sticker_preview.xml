@@ -22,8 +22,8 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:contentDescription="@string/app_name"
-            android:scaleType="fitCenter"
-            tools:src="@drawable/img_sticker_01" />
+            android:scaleType="centerInside"
+            tools:src="@drawable/img_decor_1" />
 
     </FrameLayout>
 

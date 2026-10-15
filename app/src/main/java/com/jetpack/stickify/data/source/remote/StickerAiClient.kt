@@ -62,7 +62,7 @@ class StickerAiClient @Inject constructor(
                 .put("imageBase64", Base64.encodeToString(imageBytes, Base64.NO_WRAP))
                 .put("prompt", prompt)
             socket.emit("generate_sticker", payload)
-            trySend(AiGenerationState.Progress(2, "Submitting request..."))
+            trySend(AiGenerationState.Progress(2, "Đang tải ảnh lên..."))
         }
 
         socket.on("progress_update") { args ->

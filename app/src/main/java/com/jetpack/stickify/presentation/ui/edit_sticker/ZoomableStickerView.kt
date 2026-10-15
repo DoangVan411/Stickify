@@ -27,6 +27,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import com.jetpack.stickify.R
 import com.jetpack.stickify.data.gif.StickerAnimationRenderer
+import java.util.UUID
 
 class ZoomableStickerView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
@@ -374,8 +375,18 @@ class ZoomableStickerView @JvmOverloads constructor(
         return true
     }
 
-    fun addDecorBitmap(bitmap: Bitmap, id: String = java.util.UUID.randomUUID().toString()) {
+    var maxDecorLimit: Int = 40
+    var onMaxDecorLimitReached: (() -> Unit)? = null
+
+    fun getDecorCount(): Int = decorItems.size
+    fun isMaxDecorLimitReached(): Boolean = decorItems.size >= maxDecorLimit
+
+    fun addDecorBitmap(bitmap: Bitmap, id: String = UUID.randomUUID().toString()) {
         if (!hasContent()) return
+        if (decorItems.size >= maxDecorLimit) {
+            onMaxDecorLimitReached?.invoke()
+            return
+        }
         if (!isMatrixInitialized && width > 0 && height > 0) {
             resetTransformToFit(baseWidth(), baseHeight())
         }
@@ -1255,6 +1266,10 @@ class ZoomableStickerView @JvmOverloads constructor(
     }
 
     private fun duplicateDecor(decor: DecorItemState) {
+        if (decorItems.size >= maxDecorLimit) {
+            onMaxDecorLimitReached?.invoke()
+            return
+        }
         val currentScale = currentMatrixScale().coerceAtLeast(0.01f)
         val offset = 24f * resources.displayMetrics.density / currentScale
         val duplicated = decor.copy(
@@ -1354,6 +1369,11 @@ class ZoomableStickerView @JvmOverloads constructor(
 
     private fun addDrawDecorAt(screenX: Float, screenY: Float): Boolean {
         val brush = drawDecorBrush ?: return false
+        if (decorItems.size >= maxDecorLimit) {
+            setDrawDecorBrush(null)
+            onMaxDecorLimitReached?.invoke()
+            return false
+        }
         val point = screenToCanvasPoint(screenX, screenY) ?: return false
         val randomScale = brush.minScaleRatio +
                 (brush.maxScaleRatio - brush.minScaleRatio) * kotlin.random.Random.nextFloat()

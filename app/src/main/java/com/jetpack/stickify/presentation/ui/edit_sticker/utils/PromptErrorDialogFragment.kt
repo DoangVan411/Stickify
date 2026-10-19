@@ -2,10 +2,12 @@ package com.jetpack.stickify.presentation.ui.edit_sticker.utils
 
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.TextView
 import androidx.fragment.app.DialogFragment
@@ -31,9 +33,20 @@ class PromptErrorDialogFragment : DialogFragment() {
         super.onStart()
         dialog?.window?.apply {
             val displayMetrics = requireContext().resources.displayMetrics
-            val width = (displayMetrics.widthPixels * 0.88).toInt()
+            val width = (displayMetrics.widthPixels * 0.85).toInt()
             setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT)
             setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+            // Độ mờ đĩa nền dịu nhẹ
+            setDimAmount(0.35f)
+
+            // Hiệu ứng loang mờ màn hình phía sau (Background Blur) trên Android 12+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                attributes = attributes.apply {
+                    blurBehindRadius = 40
+                }
+            }
         }
     }
     override fun onCreateView(

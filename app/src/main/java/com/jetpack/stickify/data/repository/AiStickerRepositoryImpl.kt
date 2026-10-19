@@ -34,7 +34,7 @@ class AiStickerRepositoryImpl @Inject constructor(
         client.generate(jpeg, buildPrompt(prompt)).collect { state ->
             when (state) {
                 is AiGenerationState.Progress -> emit(AiStickerStep.Progress(state.percent.coerceAtMost(95), state.message))
-                is AiGenerationState.Error -> emit(AiStickerStep.Failed("(${state.code}) ${state.message}"))
+                is AiGenerationState.Error -> emit(AiStickerStep.Failed(state.message))
                 is AiGenerationState.Frames -> {
                     emit(AiStickerStep.Progress(97, "Đang xử lý..."))
                     val frames = coroutineScope {

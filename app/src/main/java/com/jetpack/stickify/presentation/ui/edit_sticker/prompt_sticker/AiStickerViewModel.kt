@@ -131,7 +131,8 @@ class AiStickerViewModel @Inject constructor(
                         is AiStickerStep.Progress -> _uiState.update { it.copy(percent = step.percent, message = step.message) }
                         is AiStickerStep.Failed -> {
                             Log.e("AiSticker", "Failed: ${step.message}")
-                            _uiState.update { it.copy(error = step.message) }
+                            val friendlyMessage = formatUserFriendlyError(step.message)
+                            _uiState.update { it.copy(error = friendlyMessage) }
                         }
                         is AiStickerStep.Done -> {
                             Log.d("AiSticker", "Done: ${step.animation.frames.size} frame, ${step.animation.frames.firstOrNull()?.width}x${step.animation.frames.firstOrNull()?.height}")
@@ -147,7 +148,8 @@ class AiStickerViewModel @Inject constructor(
                 throw e
             } catch (e: Throwable) {
                 Log.e("AiSticker", "generate() crashed", e)
-                _uiState.update { it.copy(error = e.message ?: e.javaClass.simpleName) }
+                val friendlyMessage = formatUserFriendlyError(e.message ?: e.javaClass.simpleName)
+                _uiState.update { it.copy(error = friendlyMessage) }
             } finally {
                 _uiState.update { it.copy(isGenerating = false) }
             }
@@ -197,10 +199,65 @@ class AiStickerViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _events.send(AiStickerEvent.ExportFailed(e.message ?: "Xuất sticker động thất bại"))
+                val friendlyMessage = formatUserFriendlyError(e.message ?: "Xuất sticker động thất bại")
+                _events.send(AiStickerEvent.ExportFailed(friendlyMessage))
             } finally {
                 frames.forEach { if (!it.isRecycled) it.recycle() }
             }
+        }
+    }
+
+    private fun formatUserFriendlyError(rawMessage: String?): String {
+        if (rawMessage.isNullOrBlank()) {
+            return "Đã có lỗi xảy ra trong quá trình tạo AI Sticker. Vui lòng thử lại sau."
+        }
+
+        val trimmed = rawMessage.trim()
+
+        // 1. Loại bỏ tiền tố mã lỗi kỹ thuật dạng "(500) ", "(400) ", "(0) " nếu có
+        val cleanText = trimmed.replace(Regex("^\\(\\d+\\)\\s*"), "")
+
+        // 2. Chuyển đổi mã lỗi/exception thành thông báo tiếng Việt lịch sự, rõ ràng
+        return when {
+            // Lỗi kết nối / Mạng
+            cleanText.contains("kết nối", ignoreCase = true) ||
+            cleanText.contains("connect", ignoreCase = true) ||
+            cleanText.contains("timeout", ignoreCase = true) ||
+            cleanText.contains("network", ignoreCase = true) ||
+            cleanText.contains("UnknownHost", ignoreCase = true) -> {
+                "Không thể kết nối đến máy chủ AI. Vui lòng kiểm tra lại kết nối mạng."
+            }
+
+            // Lỗi prompt / Mô tả không phù hợp
+            trimmed.contains("(400)") ||
+            cleanText.contains("prompt", ignoreCase = true) ||
+            cleanText.contains("invalid", ignoreCase = true) -> {
+                "Mô tả không hợp lệ hoặc chưa được hỗ trợ. Vui lòng thử lại với mô tả khác."
+            }
+
+            // Lỗi giới hạn lượt dùng / Máy chủ bận
+            trimmed.contains("(429)") ||
+            cleanText.contains("rate limit", ignoreCase = true) ||
+            cleanText.contains("too many", ignoreCase = true) -> {
+                "Hệ thống AI đang quá tải. Vui lòng thử lại sau ít phút."
+            }
+
+            // Lỗi máy chủ (500, 502, 503) hoặc đọc frame
+            trimmed.contains("(500)") || trimmed.contains("(502)") || trimmed.contains("(503)") ||
+            cleanText.contains("Internal Server Error", ignoreCase = true) ||
+            cleanText.contains("frame", ignoreCase = true) -> {
+                "Máy chủ AI gặp sự cố tạm thời khi tạo nhãn dán. Vui lòng thử lại sau."
+            }
+
+            // Lỗi Exception kỹ thuật
+            cleanText.endsWith("Exception") || cleanText.contains("NullPointer") -> {
+                "Đã có lỗi kỹ thuật xảy ra. Vui lòng thử lại sau."
+            }
+
+            // Thông báo tiếng Việt bình thường không chứa mã code
+            cleanText.isNotBlank() -> cleanText
+
+            else -> "Đã có lỗi xảy ra trong quá trình tạo AI Sticker. Vui lòng thử lại sau."
         }
     }
 

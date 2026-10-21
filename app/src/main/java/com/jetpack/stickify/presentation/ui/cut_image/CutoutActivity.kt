@@ -253,4 +253,14 @@ class CutoutActivity : AppCompatActivity() {
         }
         dialog.show(supportFragmentManager, ExitConfirmDialogFragment.TAG)
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        sourceBitmap?.let {
+            if (!it.isRecycled) {
+                it.recycle()
+            }
+        }
+        sourceBitmap = null
+    }
 }

@@ -26,8 +26,29 @@ import kotlin.math.abs
 object ImageUtils {
 
     /** Đọc ảnh từ Uri, decode và xoay theo đúng EXIF orientation. */
-    fun loadUprightBitmap(context: Context, uri: Uri, maxDimension: Int = 2048): Bitmap {
-        val rawBitmap = decodeBitmap(context, uri, maxDimension)
+    fun loadUprightBitmap(context: Context, uri: Uri, maxDimension: Int = 1440): Bitmap {
+        // 1. Chỉ đọc kích thước bounds (không tốn RAM)
+        val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        openStream(context, uri)?.use { BitmapFactory.decodeStream(it, null, boundsOptions) }
+
+        var sampleSize = 1
+        val (w, h) = boundsOptions.outWidth to boundsOptions.outHeight
+
+        // Tính sampleSize theo hệ số 2 (1, 2, 4, 8...)
+        while (w / sampleSize > maxDimension || h / sampleSize > maxDimension) {
+            sampleSize *= 2
+        }
+
+        // 2. Decode bitmap thực tế với sampleSize đã tính
+        val decodeOptions = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+
+        val rawBitmap = openStream(context, uri)?.use {
+            BitmapFactory.decodeStream(it, null, decodeOptions)
+        } ?: throw IllegalArgumentException("Không đọc được ảnh")
+
         val orientation = readExifOrientation(context, uri)
         return applyExifOrientation(rawBitmap, orientation)
     }
@@ -66,6 +87,7 @@ object ImageUtils {
     }
 
     private fun applyExifOrientation(bitmap: Bitmap, orientation: Int): Bitmap {
+        if (orientation == ExifInterface.ORIENTATION_NORMAL) return bitmap
         val matrix = Matrix()
         when (orientation) {
             ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
@@ -81,7 +103,14 @@ object ImageUtils {
             }
             else -> return bitmap
         }
-        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        val rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+
+        // GIẢI PHÓNG BITMAP GỐC NẾU ĐÃ TẠO RA BITMAP MỚI
+        if (rotatedBitmap != bitmap && !bitmap.isRecycled) {
+            bitmap.recycle()
+        }
+
+        return rotatedBitmap
     }
 
     /** Lưu bitmap thành PNG (giữ alpha) trong cache dir và trả về content Uri qua FileProvider. */

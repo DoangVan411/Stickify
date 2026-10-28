@@ -50,9 +50,25 @@ class KeyboardStickersBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 val height = (displayMetrics.heightPixels * 7) / 16
                 bottomSheet.layoutParams.height = height
                 behavior.peekHeight = height
-                behavior.state = BottomSheetBehavior.STATE_EXPANDED
+
+                if (behavior.state == BottomSheetBehavior.STATE_EXPANDED) {
+                    onShownListener?.invoke()
+                } else {
+                    behavior.addBottomSheetCallback(object : BottomSheetBehavior.BottomSheetCallback() {
+                        override fun onStateChanged(bottomSheet: View, newState: Int) {
+                            if (newState == BottomSheetBehavior.STATE_EXPANDED) {
+                                behavior.removeBottomSheetCallback(this)
+                                onShownListener?.invoke()
+                            }
+                        }
+
+                        override fun onSlide(bottomSheet: View, slideOffset: Float) {}
+                    })
+                    behavior.state = BottomSheetBehavior.STATE_EXPANDED
+                }
+            } else {
+                onShownListener?.invoke()
             }
-            onShownListener?.invoke()
         }
         return dialog
     }
@@ -84,31 +100,36 @@ class KeyboardStickersBottomSheetDialogFragment : BottomSheetDialogFragment() {
     }
 
     fun getTopLeftItemScreenLocation(onReady: (IntArray, Int, Int) -> Unit) {
-        val listener = object : ViewTreeObserver.OnGlobalLayoutListener {
-            override fun onGlobalLayout() {
-                val viewHolder = rvStickers.findViewHolderForAdapterPosition(0)
-                if (viewHolder != null && viewHolder.itemView.width > 0) {
-                    rvStickers.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                    val loc = IntArray(2)
-                    viewHolder.itemView.getLocationOnScreen(loc)
-                    onReady(loc, viewHolder.itemView.width, viewHolder.itemView.height)
-                }
-            }
-        }
-        rvStickers.viewTreeObserver.addOnGlobalLayoutListener(listener)
-        rvStickers.post {
+        val measureAction = Runnable {
+            if (!isAdded || isRemoving) return@Runnable
             val vh = rvStickers.findViewHolderForAdapterPosition(0)
             if (vh != null && vh.itemView.width > 0) {
-                try {
-                    rvStickers.viewTreeObserver.removeOnGlobalLayoutListener(listener)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
                 val loc = IntArray(2)
                 vh.itemView.getLocationOnScreen(loc)
                 onReady(loc, vh.itemView.width, vh.itemView.height)
+            } else {
+                val listener = object : ViewTreeObserver.OnGlobalLayoutListener {
+                    override fun onGlobalLayout() {
+                        if (!isAdded || isRemoving) return
+                        val holder = rvStickers.findViewHolderForAdapterPosition(0)
+                        if (holder != null && holder.itemView.width > 0) {
+                            try {
+                                rvStickers.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                            val loc = IntArray(2)
+                            holder.itemView.getLocationOnScreen(loc)
+                            onReady(loc, holder.itemView.width, holder.itemView.height)
+                        }
+                    }
+                }
+                rvStickers.viewTreeObserver.addOnGlobalLayoutListener(listener)
             }
         }
+
+        // Đợi 150ms để Samsung One UI (Galaxy Note 10) hoàn tất hiệu ứng spring/settling
+        rvStickers.postDelayed(measureAction, 150)
     }
 
     fun setFlyingCompleted() {

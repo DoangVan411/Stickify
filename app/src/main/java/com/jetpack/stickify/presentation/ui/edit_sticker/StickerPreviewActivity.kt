@@ -150,16 +150,21 @@ class StickerPreviewActivity : AppCompatActivity() {
         onComplete: () -> Unit
     ) {
         val container = (bottomSheet.dialog?.window?.decorView as? ViewGroup)
+            ?: (window.decorView as? ViewGroup)
             ?: findViewById<ViewGroup>(android.R.id.content)
             ?: run {
                 onComplete()
                 return
             }
 
+        val containerLoc = IntArray(2)
+        container.getLocationOnScreen(containerLoc)
+
         val startLoc = IntArray(2)
         ivPreviewSticker.getLocationOnScreen(startLoc)
-        val startX = startLoc[0].toFloat()
-        val startY = startLoc[1].toFloat()
+
+        val localStartX = (startLoc[0] - containerLoc[0]).toFloat()
+        val localStartY = (startLoc[1] - containerLoc[1]).toFloat()
         val startW = ivPreviewSticker.width
         val startH = ivPreviewSticker.height
 
@@ -168,12 +173,25 @@ class StickerPreviewActivity : AppCompatActivity() {
             return
         }
 
+        val localTargetX = endX - containerLoc[0]
+        val localTargetY = endY - containerLoc[1]
+
+        // Tọa độ x, y đích để tâm của animView khớp chính xác với tâm của ô mục tiêu
+        val finalX = localTargetX + (targetW - startW) / 2f
+        val finalY = localTargetY + (targetH - startH) / 2f
+
+        val scaleX = targetW.toFloat() / startW
+        val scaleY = targetH.toFloat() / startH
+        val scale = minOf(scaleX, scaleY)
+
         val animView = ImageView(this).apply {
             layoutParams = FrameLayout.LayoutParams(startW, startH)
-            x = startX
-            y = startY
-            elevation = 999f
-            translationZ = 999f
+            x = localStartX
+            y = localStartY
+            pivotX = startW / 2f
+            pivotY = startH / 2f
+            elevation = 9999f
+            translationZ = 9999f
             scaleType = ImageView.ScaleType.FIT_CENTER
             stickerUri?.let { uri ->
                 Glide.with(this@StickerPreviewActivity)
@@ -182,25 +200,15 @@ class StickerPreviewActivity : AppCompatActivity() {
             }
         }
         container.addView(animView)
-
-        val scale = targetW.toFloat() / startW
-
-        val targetCenterX = endX + targetW / 2f
-        val targetCenterY = endY + targetH / 2f
-
-        val startCenterX = startX + startW / 2f
-        val startCenterY = startY + startH / 2f
-
-        val translationX = targetCenterX - startCenterX
-        val translationY = targetCenterY - startCenterY
+        animView.bringToFront()
 
         animView.animate()
-            .translationX(translationX)
-            .translationY(translationY)
+            .x(finalX)
+            .y(finalY)
             .scaleX(scale)
             .scaleY(scale)
             .alpha(1.0f)
-            .setDuration(1400)
+            .setDuration(1200)
             .setInterpolator(AccelerateDecelerateInterpolator())
             .withEndAction {
                 container.removeView(animView)
